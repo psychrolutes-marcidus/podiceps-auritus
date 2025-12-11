@@ -133,8 +133,6 @@ pub fn draw_linestring(
     zoom_level: i32,
     sampling_zoom_level: i32,
 ) -> Vec<PointWTime> {
-    let sampling_zoom_level = cmp::min(sampling_zoom_level, 22);
-
     let mut point_ext: Vec<PointWTime> = ls
         .points()
         .map(|p| {
@@ -205,16 +203,23 @@ pub fn enhance_point(
         .collect()
 }
 
+/// This implementation is taken from: https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames under CC BY-SA 2.0 license
+/// The only changes to the implementation is variable names such that it follows those used in the rest of the program.
 #[inline(always)]
 pub fn point_to_grid(point: Coord<f64>, sampling_zoom_level: i32) -> Point {
     use std::f64::consts::*;
+    let n = (1 << sampling_zoom_level) as f64;
 
-    let x =
-        (1. / TAU * 2_f64.powi(sampling_zoom_level) * (PI + (point.x * PI / 180.))).floor() as i32;
-    let y = (1. / TAU
-        * 2_f64.powi(sampling_zoom_level)
-        * (PI - ((FRAC_PI_4 + (point.y * PI / 180.) / 2.).tan()).ln()))
-    .floor() as i32;
+    let x = (n * (point.x + 180.0) / 360.0) as i32;
+    let y_rad = point.y.to_radians();
+    let y = (n * (1.0 - (y_rad.tan() + (1.0 / y_rad.cos())).ln() / PI) / 2.0) as i32;
+
+    // let x =
+    //     (1. / TAU * 2_f64.powi(sampling_zoom_level) * (PI + (point.x * PI / 180.))).floor() as i32;
+    // let y = (1. / TAU
+    //     * 2_f64.powi(sampling_zoom_level)
+    //     * (PI - ((FRAC_PI_4 + (point.y * PI / 180.) / 2.).tan()).ln()))
+    // .floor() as i32;
 
     Point { x, y }
 }

@@ -16,6 +16,7 @@ use linesonmaps::{
     },
     types::{linestringm, multipointm::MultiPointM, pointm::PointM},
 };
+use pgrx::pg_sys::float4;
 use pgrx::prelude::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -106,7 +107,7 @@ fn segment_points(linestring: &[u8]) -> SetOfIterator<'static, Vec<u8>> {
 #[pg_extern(parallel_safe, immutable)]
 fn extract_stop_objects(
     stop_objects: &[u8],
-    sogs: Vec<Option<f64>>,
+    sogs: Vec<Option<Numeric<4, 1>>>,
 ) -> TableIterator<
     'static,
     (
@@ -122,9 +123,9 @@ fn extract_stop_objects(
         .0
         .iter()
         .cloned()
-        .zip(sogs.iter().map(|x| match x {
-            Some(v) => *v as f32,
-            None => f32::NAN,
+        .zip(sogs.into_iter().flat_map(|x| match x {
+            Some(v) => v.try_into().ok(),
+            None => Some(f32::NAN),
         }))
         .collect();
     points.par_sort_by(|a, b| a.0.coord.m.total_cmp(&b.0.coord.m));

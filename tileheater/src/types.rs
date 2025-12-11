@@ -1,3 +1,4 @@
+use std::hint::unreachable_unchecked;
 use std::num::NonZero;
 
 use chrono::{Datelike, Timelike};
@@ -42,10 +43,10 @@ fn render_geom(
     geom: &[u8],
     zoom_level: i32,
     sampling_zoom_level: i32,
-    a: Option<f64>,
-    b: Option<f64>,
-    c: Option<f64>,
-    d: Option<f64>,
+    a: Option<i16>,
+    b: Option<i16>,
+    c: Option<i16>,
+    d: Option<i16>,
     filter_tile_x: Option<i32>,
     filter_tile_y: Option<i32>,
     filter_tile_z: Option<i32>,
@@ -87,18 +88,26 @@ fn render_geom(
             let linem: Vec<LineStringM<4326>> = filter_tile.map_or(vec![linem.to_owned()], |ft| {
                 let indexes: Vec<usize> = linem
                     .0
-                    .iter()
+                    .windows(2)
                     .enumerate()
-                    .filter(|(_, p)| {
-                        let grid_point = point_to_grid((p.x, p.y).into(), ft.2);
-                        grid_point.x == ft.0 && grid_point.y == ft.1
+                    .filter(|(_, s)| match s {
+                        [a, b] => {
+                            let a_grid = point_to_grid((a.x, a.y).into(), ft.2);
+                            let b_grid = point_to_grid((b.x, b.y).into(), ft.2);
+                            let x_min = a_grid.x.min(b_grid.x);
+                            let y_min = a_grid.y.min(b_grid.y);
+                            let x_max = a_grid.x.max(b_grid.x);
+                            let y_max = a_grid.y.max(b_grid.y);
+                            x_min <= ft.0 && x_max >= ft.0 && y_min <= ft.1 && y_max >= ft.1
+                        }
+                        _ => unsafe { unreachable_unchecked() },
                     })
                     .map(|(i, _)| i)
                     .collect();
                 indexes
                     .chunk_by(|a, b| *a == b - 1)
                     .map(|x| {
-                        let first = x.first().map(|x| x.saturating_sub(1));
+                        let first = x.first().copied();
                         let last = x
                             .last()
                             .map(|x| std::cmp::max(x.saturating_add(1), length - 1));
@@ -115,7 +124,11 @@ fn render_geom(
                         .iter()
                         .map(|lm| {
                             lm.lines()
-                                .map(|line: LineM<4326>| line_to_triangle_pair(&line, a, b, c, d))
+                                .map(|line: LineM<4326>| {
+                                    line_to_triangle_pair(
+                                        &line, a as f64, b as f64, c as f64, d as f64,
+                                    )
+                                })
                                 .flat_map(|(tri1, tri2)| {
                                     [
                                         draw_line_triangle(tri1, sampling_zoom_level),
