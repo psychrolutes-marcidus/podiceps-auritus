@@ -148,22 +148,24 @@ fn extract_stop_objects(
                 let options = wkb::writer::WriteOptions {
                     endianness: wkb::Endianness::LittleEndian,
                 };
-                let ts = TimestampWithTimeZone::new(
+                let ts = TimestampWithTimeZone::with_timezone(
                     tz_tange.0.year() as i32,
                     tz_tange.0.month() as u8,
                     tz_tange.0.day() as u8,
                     tz_tange.0.hour() as u8,
                     tz_tange.0.minute() as u8,
                     tz_tange.0.second() as f64,
+                    "Etc/UTC",
                 )
                 .unwrap();
-                let te = TimestampWithTimeZone::new(
+                let te = TimestampWithTimeZone::with_timezone(
                     tz_tange.1.year() as i32,
                     tz_tange.1.month() as u8,
                     tz_tange.1.day() as u8,
                     tz_tange.1.hour() as u8,
                     tz_tange.1.minute() as u8,
                     tz_tange.1.second() as f64,
+                    "Etc/UTC",
                 )
                 .unwrap();
                 if polygon.exterior().0.len() < 4 {

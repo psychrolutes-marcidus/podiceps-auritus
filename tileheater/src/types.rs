@@ -189,7 +189,7 @@ fn render_geom(
                 p.point.x,
                 p.point.y,
                 p.z,
-                TimestampWithTimeZone::new(
+                TimestampWithTimeZone::with_timezone(
                     p.time_start.year() as i32,
                     p.time_start.month() as u8,
                     p.time_start.day() as u8,
@@ -197,15 +197,17 @@ fn render_geom(
                     p.time_start.minute() as u8,
                     p.time_start.second() as f64
                         + (p.time_start.nanosecond() as f64 / 1000000000.0),
+                    "Etc/UTC",
                 )
                 .unwrap(),
-                TimestampWithTimeZone::new(
+                TimestampWithTimeZone::with_timezone(
                     p.time_end.year() as i32,
                     p.time_end.month() as u8,
                     p.time_end.day() as u8,
                     p.time_end.hour() as u8,
                     p.time_end.minute() as u8,
                     p.time_end.second() as f64 + (p.time_end.nanosecond() as f64 / 1000000000.0),
+                    "Etc/UTC",
                 )
                 .unwrap(),
             )
