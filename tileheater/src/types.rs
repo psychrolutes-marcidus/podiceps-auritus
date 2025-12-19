@@ -74,11 +74,10 @@ fn render_geom(
             let pointm: PointM<4326> =
                 PointM::try_from(CoordM::try_from(geom).expect("Expected a PointM"))
                     .expect("Expected a PointM");
-            vec![render_point(pointm, sampling_zoom_level, filter_tile)
-                .map(|x| x.change_zoom(zoom_level))]
-            .into_iter()
-            .flatten()
-            .collect()
+            vec![render_point(pointm, sampling_zoom_level).map(|x| x.change_zoom(zoom_level))]
+                .into_iter()
+                .flatten()
+                .collect()
         }
         wkb::reader::GeometryType::LineString => {
             let linem: LineStringM<4326> =
@@ -216,39 +215,13 @@ fn render_geom(
     TableIterator::new(points)
 }
 
-fn render_point(
-    point: PointM,
-    sampling_zoom_level: i32,
-    filter_tile: Option<FilterTile>,
-) -> Option<PointWTime> {
+fn render_point(point: PointM, sampling_zoom_level: i32) -> Option<PointWTime> {
     let grid_point = point_to_grid((point.coord.x, point.coord.y).into(), sampling_zoom_level);
-    match filter_tile {
-        Some(tile) => {
-            let bb = tile.min_max_bb(sampling_zoom_level);
-            if grid_point.x >= bb.0
-                && grid_point.x <= bb.2
-                && grid_point.y >= bb.1
-                && grid_point.y <= bb.3
-            {
-                Some(PointWTime {
-                    point: grid_point,
-                    z: sampling_zoom_level,
-                    time_start: chrono::DateTime::from_timestamp_secs(point.coord.m as i64)
-                        .expect("Should work"),
-                    time_end: chrono::DateTime::from_timestamp_secs(point.coord.m as i64)
-                        .expect("Should work"),
-                })
-            } else {
-                None
-            }
-        }
-        None => Some(PointWTime {
-            point: grid_point,
-            z: sampling_zoom_level,
-            time_start: chrono::DateTime::from_timestamp_secs(point.coord.m as i64)
-                .expect("Should work"),
-            time_end: chrono::DateTime::from_timestamp_secs(point.coord.m as i64)
-                .expect("Should work"),
-        }),
-    }
+    Some(PointWTime {
+        point: grid_point,
+        z: sampling_zoom_level,
+        time_start: chrono::DateTime::from_timestamp_secs(point.coord.m as i64)
+            .expect("Should work"),
+        time_end: chrono::DateTime::from_timestamp_secs(point.coord.m as i64).expect("Should work"),
+    })
 }

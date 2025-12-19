@@ -108,6 +108,10 @@ fn segment_points(linestring: &[u8]) -> SetOfIterator<'static, Vec<u8>> {
 fn extract_stop_objects(
     stop_objects: &[u8],
     sogs: Vec<Option<Numeric<4, 1>>>,
+    min_cluster_size: i64,
+    dist_thres: f64,
+    time_thres: i64,
+    speed_thres: f32,
 ) -> TableIterator<
     'static,
     (
@@ -132,10 +136,14 @@ fn extract_stop_objects(
 
     let mut conf = DbScanConf::builder()
         .dist(|a: &PointM<4326>, b: &PointM<4326>| Geodesic.distance(*a, *b))
-        .max_time_thres(chrono::TimeDelta::new(30 * 60, 0).expect("This did not work"))
-        .speed_thres(1.5)
-        .min_cluster_size(150.try_into().expect("Neither did this"))
-        .dist_thres(250.0)
+        .max_time_thres(chrono::TimeDelta::new(time_thres * 60, 0).expect("This did not work"))
+        .speed_thres(speed_thres)
+        .min_cluster_size(
+            (min_cluster_size as usize)
+                .try_into()
+                .expect("Neither did this"),
+        )
+        .dist_thres(dist_thres)
         .build();
     let clusters = conf.run(&points);
 
