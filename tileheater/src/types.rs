@@ -17,19 +17,6 @@ pub struct RenderPointsAgg {
 #[derive(Copy, Clone, Debug)]
 pub struct FilterTile(i32, i32, i32);
 
-impl FilterTile {
-    fn min_max_bb(&self, sampling_zoom_level: i32) -> (i32, i32, i32, i32) {
-        let z = self.2;
-        let diff = sampling_zoom_level - z;
-        let x_min = self.0.saturating_pow(diff as u32);
-        let y_min = self.1.saturating_pow(diff as u32);
-        let x_max = (self.0 + 1).saturating_pow(diff as u32) - 1;
-        let y_max = (self.1 + 1).saturating_pow(diff as u32) - 1;
-
-        (x_min, y_min, x_max, y_max)
-    }
-}
-
 #[pg_extern(parallel_safe, immutable)]
 fn render_geom(
     geom: &[u8],
@@ -166,12 +153,7 @@ fn render_geom(
                     .collect(),
             }
         }
-        wkb::reader::GeometryType::Polygon => todo!(),
-        wkb::reader::GeometryType::MultiPoint => todo!(),
-        wkb::reader::GeometryType::MultiLineString => todo!(),
-        wkb::reader::GeometryType::MultiPolygon => todo!(),
-        wkb::reader::GeometryType::GeometryCollection => todo!(),
-        _ => todo!(),
+        _ => panic!("Passed unsupported type to function"),
     };
     let points: Vec<_> = points
         .into_iter()

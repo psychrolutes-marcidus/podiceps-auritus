@@ -15,7 +15,7 @@ pub struct LineStringM<const CRS: u64 = 4326>(pub Vec<CoordM<CRS>>);
 
 impl<const CRS: u64> LineStringM<CRS> {
     pub fn new(coords: Vec<CoordM<CRS>>) -> Option<LineStringM<CRS>> {
-        if coords.iter().map(|f| f.m).is_sorted() {
+        if coords.iter().map(|f| f.m).is_sorted() && coords.len() != 1 {
             Some(LineStringM(coords))
         } else {
             None
