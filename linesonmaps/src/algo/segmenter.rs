@@ -1,4 +1,5 @@
 use chrono::{DateTime, TimeDelta, Utc};
+use rayon::prelude::*;
 use wkb::writer::{WriteOptions, write_line_string, write_point};
 
 use crate::types::coordm::CoordM;
@@ -72,26 +73,15 @@ where
     let clone = ls.clone();
 
     let ls = ls.0;
-    let mut output: Vec<Vec<CoordM<CRS>>> = vec![vec![
-        *ls.first().expect("input trajectory should be nonempty"),
-    ]];
 
-    for ele in ls.windows(2) {
-        let len = output.len();
-        match func(ele[0].into(), ele[1].into()) {
-            true => output
-                .get_mut(len - 1)
-                .unwrap()
-                .push(*ele.last().expect("should have exactly 2 elements")),
-            false => {
-                output.push(vec![*ele.last().unwrap()]);
-            }
-        }
-    }
+    let output: Vec<Vec<_>> = ls
+        .chunk_by(|a, b| func(a.into(), b.into()))
+        .map(|x| x.to_owned())
+        .collect();
 
     // partition based on sub-trajectory length (length ==1 are not "proper" trajectories)
     let splits = output
-        .into_iter()
+        .into_par_iter()
         .map(|v| match v {
             vec if vec.len() == 1 => TrajectorySplit::Point(
                 vec.first()
@@ -433,7 +423,7 @@ mod tests {
                 .map(|(tz, i)| (tz.to_rfc3339(), (*tz + *i).to_rfc3339()))
                 .collect::<Vec<_>>()
         );
-        assert!(max_dist<1000.0, "{max_dist}");
+        assert!(max_dist < 1000.0, "{max_dist}");
     }
     #[test]
     fn buggy_traj_bad_part_2() {
@@ -489,6 +479,6 @@ mod tests {
             .max_by(f64::total_cmp)
             .unwrap();
 
-        assert!(max_dist<1000.0, "{max_dist}");
+        assert!(max_dist < 1000.0, "{max_dist}");
     }
 }

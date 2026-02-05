@@ -3,13 +3,14 @@ use geo_traits::{
     UnimplementedLine, UnimplementedMultiLineString, UnimplementedMultiPoint,
     UnimplementedMultiPolygon, UnimplementedPolygon, UnimplementedRect, UnimplementedTriangle,
 };
+// use pgrx::FromDatum;
 
 use crate::types::coordm::CoordM;
 use crate::types::error::Error;
 use crate::types::linem::LineM;
 use crate::types::pointm::PointM;
 
-#[derive(Debug, Clone, PartialEq,Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct LineStringM<const CRS: u64 = 4326>(pub Vec<CoordM<CRS>>);
 
 impl<const CRS: u64> LineStringM<CRS> {
@@ -21,13 +22,13 @@ impl<const CRS: u64> LineStringM<CRS> {
         }
     }
 
-    pub fn points(&self) -> PointsIter<'_,CRS> {
+    pub fn points(&self) -> PointsIter<'_, CRS> {
         PointsIter(self.0.iter())
     }
 
     /// Creates an iterator of lines of the given [`LineStringM<CRS>`].
-    pub fn lines(&self) -> impl Iterator<Item=LineM<CRS>> + '_ {
-        self.0.windows(2).map(|ps| LineM::from((ps[0],ps[1])))
+    pub fn lines(&self) -> impl Iterator<Item = LineM<CRS>> + '_ {
+        self.0.windows(2).map(|ps| LineM::from((ps[0], ps[1])))
     }
 }
 
@@ -160,9 +161,9 @@ impl<const CRS: u64> GeometryTrait for LineStringM<CRS> {
     }
 }
 
-pub struct PointsIter<'a,const CRS:u64>(::core::slice::Iter<'a, CoordM<CRS>>);
+pub struct PointsIter<'a, const CRS: u64>(::core::slice::Iter<'a, CoordM<CRS>>);
 
-impl<'a,const CRS:u64> Iterator for PointsIter<'a,CRS> {
+impl<'a, const CRS: u64> Iterator for PointsIter<'a, CRS> {
     type Item = PointM<CRS>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -170,15 +171,25 @@ impl<'a,const CRS:u64> Iterator for PointsIter<'a,CRS> {
     }
 }
 
-pub struct LinesIter<'a,const CRS:u64>(::core::slice::Iter<'a,LineM<CRS>>);
+pub struct LinesIter<'a, const CRS: u64>(::core::slice::Iter<'a, LineM<CRS>>);
 
-impl<'a, const CRS:u64> Iterator for LinesIter<'a,CRS>{
+impl<'a, const CRS: u64> Iterator for LinesIter<'a, CRS> {
     type Item = LineM<CRS>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().copied()
     }
 }
+
+// impl FromDatum for LineStringM<4326> {
+//     unsafe fn from_polymorphic_datum(
+//         datum: pgrx::pg_sys::Datum,
+//         is_null: bool,
+//         typoid: pgrx::pg_sys::Oid,
+//     ) -> Option<Self> {
+//         todo!()
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -256,12 +267,12 @@ mod tests {
         let ls = LineStringM::try_from(coords.clone()).unwrap();
 
         let mut li = ls.lines();
-        let first_line = LineM::from((coords[0],coords[1]));
-        let second_line = LineM::from((coords[1],coords[2]));
+        let first_line = LineM::from((coords[0], coords[1]));
+        let second_line = LineM::from((coords[1], coords[2]));
 
-        assert_eq!(li.next(),Some(first_line));
-        assert_eq!(li.next(),Some(second_line));
-        assert_eq!(li.next(),None);
+        assert_eq!(li.next(), Some(first_line));
+        assert_eq!(li.next(), Some(second_line));
+        assert_eq!(li.next(), None);
     }
 
     #[test]
@@ -275,5 +286,4 @@ mod tests {
         assert!(lsm.is_ok());
         // dbg!(lsm.unwrap());
     }
-
 }

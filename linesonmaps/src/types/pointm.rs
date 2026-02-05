@@ -1,4 +1,5 @@
 use crate::types::coordm::CoordM;
+use crate::types::error::Error;
 use geo::algorithm::Distance;
 use geo::algorithm::GeodesicMeasure;
 use geo::{Euclidean, HaversineMeasure};
@@ -41,6 +42,26 @@ impl<const CRS: u64> From<&CoordM<CRS>> for PointM<CRS> {
     fn from(value: &CoordM<CRS>) -> Self {
         PointM {
             coord: value.to_owned(),
+        }
+    }
+}
+
+impl<const CRS: u64> TryFrom<wkb::reader::Wkb<'_>> for PointM<CRS> {
+    type Error = super::error::Error;
+
+    fn try_from(value: wkb::reader::Wkb<'_>) -> Result<Self, Self::Error> {
+        match value.as_type() {
+            geo_traits::GeometryType::Point(p) => Ok(PointM {
+                coord: CoordM {
+                    x: p.coord().ok_or_else(|| Error::IncompatibleType)?.x(),
+                    y: p.coord().ok_or_else(|| Error::IncompatibleType)?.y(),
+                    m: p.coord()
+                        .ok_or_else(|| Error::IncompatibleType)?
+                        .nth(2)
+                        .ok_or_else(|| Error::Dimension)?,
+                },
+            }),
+            _ => Err(super::error::Error::IncompatibleType),
         }
     }
 }
@@ -180,6 +201,7 @@ mod tests {
     use super::*;
     use geo::algorithm::line_measures::metric_spaces::Geodesic;
     use pretty_assertions::{assert_eq, assert_ne};
+    use wkb::reader::read_wkb;
     #[test]
     fn geodesic_distance() {
         let first = PointM::<4326>::from((1.0, 2.0, 0.0));
@@ -211,5 +233,22 @@ mod tests {
         // assert!(false);
         assert_eq!(bytes.as_slice(), &w[1..=4]);
         // assert_eq!(2001_u32,u32::from_le_bytes(w[1..=4]));
+    }
+
+    #[test]
+    fn point_from_wkb() {
+        let wkbstring = include_str!("../algo/resources/point.wkb.txt");
+
+        let bytea = hex::decode(wkbstring).unwrap();
+
+        let wkb = read_wkb(&bytea).unwrap();
+
+        let p = PointM::<4326>::try_from(wkb).unwrap();
+        // "POINT M (12.613097190856934 56.04176712036133 1704067223)"
+
+        assert_eq!(p.coord.x,12.613097190856934);
+        assert_eq!(p.coord.y,56.04176712036133);
+        assert_eq!(p.coord.m,1704067223_f64);
+
     }
 }

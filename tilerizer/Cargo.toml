@@ -11,6 +11,13 @@ data = { workspace = true }
 chrono = { workspace = true }
 geo-types = { workspace = true }
 modeling = { workspace = true }
+serde = { workspace = true }
+pgrx = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+hex = "0.4.3"
+wkb = "0.9.1"
 
 [lints]
 workspace = true

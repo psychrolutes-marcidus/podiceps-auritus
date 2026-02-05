@@ -14,7 +14,7 @@ thiserror = "2.0.16"
 typed-builder = "0.22.0"
 wkb = "0.9.0"
 pretty_assertions = "1.4.1"
-rayon = "1.11.0"
+rayon = { workspace = true }
 
 [dev-dependencies]
 bytemuck = "1.23.2"

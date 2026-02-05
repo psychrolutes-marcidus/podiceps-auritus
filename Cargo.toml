@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling"]
+members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "tileheater"]
 
 [profile.release]
 lto = true
@@ -30,3 +30,7 @@ data = { path = "data" }
 chrono = { version = "0.4.41", features = ["serde"] }
 geo-types = { version = "0.7.17" }
 modeling = { path = "modeling" }
+pgrx = "=0.16.1"
+tilerizer = { path = "tilerizer" }
+serde = "1.0.228"
+rayon = "1.11.0"
