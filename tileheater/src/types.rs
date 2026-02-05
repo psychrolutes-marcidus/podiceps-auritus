@@ -1,14 +1,6 @@
 use std::hint::unreachable_unchecked;
-use std::num::NonZero;
 
 use chrono::{Datelike, Timelike};
-use geo::Coord;
-use geo::LineString;
-use geo::Polygon;
-use geo_traits::CoordTrait;
-use geo_traits::GeometryTrait;
-use geo_traits::LineStringTrait;
-use geo_traits::PolygonTrait;
 use linesonmaps::types::{coordm::CoordM, linem::LineM, linestringm::LineStringM, pointm::PointM};
 use modeling::modeling::line_to_triangle_pair;
 use pgrx::prelude::*;
