@@ -10,7 +10,7 @@ use std::{cmp, sync::Arc};
 
 pub mod tile3d;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, /* Serialize, Deserialize */)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy,Hash, /* Serialize, Deserialize */)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
@@ -44,7 +44,7 @@ impl Zoom for PointWZ {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, /* Serialize, Deserialize */)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone,Hash, /* Serialize, Deserialize */)]
 pub struct PointWTime {
     pub point: Point,
     pub z: i32,

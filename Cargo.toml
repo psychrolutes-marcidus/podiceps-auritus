@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "tileheater"]
+members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "tileheater", "fafo"]
 
 [profile.release]
 lto = true
