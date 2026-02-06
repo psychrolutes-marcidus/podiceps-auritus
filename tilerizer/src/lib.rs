@@ -4,19 +4,18 @@ use itertools::Itertools;
 use linesonmaps::types::{linem::LineM, linestringm::LineStringM};
 use modeling::modeling::line_to_triangle_pair;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 
 use crate::tile3d::draw_line_triangle;
 
 pub mod tile3d;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct PointWZ {
     pub point: Point,
     pub z: i32,
