@@ -26,6 +26,11 @@ Linestrings should be rendered as splines in order to emulate more accurate vess
 ## Distance to AIS point error
 We want to measure distance between the sampled cell and the nearest AIS point in order to measures some form of error.
 Please expand further.
+- Distance can be measured via `LineTriangle`, same step as `probe_occupation()` (method used to get timestamp for a interpolated cell)
+- When a cell is 'marked' by our line interpolation, should the distance to ais be:
+  - From <center of cell,  probe point, closest probe point*> to <AIS point, center of AIS cell>?
+    -  *When probing a `LineTriangle` i assume multiple probes can land in the same cell
+    -  Center of cell to <center of AIS cell/AIS point> 'feels' the most 'correct'
 
 ## Model 2D vessels as splines
 Once a linestring can be interpreted as a spline it should be straight forward to convert this into continous lines.
