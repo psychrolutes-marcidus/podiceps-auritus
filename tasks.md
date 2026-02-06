@@ -41,8 +41,7 @@ This task depend on [Model linestrings as splines] to be implemented.
 Given a trajectory can be represented as a spline, is it possible to evict an AIS point given that we can interpolate that AIS point, with an error rate by it neighbors.
 
 ## Test suite for proving results
-We want to proove that our results are correct.
-Therefore, a test suite that can compare the different outputs of renderes correctly.
+A test suite that can compare the different outputs of renderes correctly.
 We should use regression test for this.
 
 ## Git Hooks pre-commit
