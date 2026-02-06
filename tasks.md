@@ -29,8 +29,7 @@ Please expand further.
 - Distance can be measured via `LineTriangle`, same step as `point_occupation()` (method used to get occupation time for interpolated cells)
   - `distance_to_ais()` on the `ais-distance` branch measures distance from (shortest path from probe to point on line) to closest AIS point 
 - When a cell is 'marked' by our line interpolation, should the distance to ais be:
-  - From <center of cell,  probe point, closest probe point*> to <AIS point, center of AIS cell>?
-    -  *When probing a `LineTriangle` i assume multiple probes can land in the same cell
+  - From <center of cell,  probe point, probe point projected onto line> to <AIS point, center of AIS cell>?
     -  Center of cell to <center of AIS cell/AIS point> 'feels' the most 'correct'
 
 ## Model 2D vessels as splines
