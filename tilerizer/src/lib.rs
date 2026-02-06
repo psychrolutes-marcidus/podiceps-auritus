@@ -1,12 +1,10 @@
 use chrono::prelude::*;
-use data::tables::Ships;
 use geo_types::Coord;
 use itertools::Itertools;
-use linesonmaps::types::{coordm::CoordM, linem::LineM, linestringm::LineStringM};
+use linesonmaps::types::{linem::LineM, linestringm::LineStringM};
 use modeling::modeling::line_to_triangle_pair;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{cmp, sync::Arc};
 
 use crate::tile3d::draw_line_triangle;
 

@@ -1,15 +1,9 @@
 use std::hint::unreachable_unchecked;
 
 use chrono::{Datelike, Timelike};
-use linesonmaps::types::{coordm::CoordM, linem::LineM, linestringm::LineStringM, pointm::PointM};
-use modeling::modeling::line_to_triangle_pair;
+use linesonmaps::types::{coordm::CoordM, linestringm::LineStringM, pointm::PointM};
 use pgrx::prelude::*;
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use tilerizer::{
-    draw_2d_vessel, draw_linestring, point_to_grid, tile3d::draw_line_triangle, FilterTile,
-    PointWTime, Zoom,
-};
+use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid, FilterTile, PointWTime, Zoom};
 use wkb::reader::Dimension;
 
 #[pg_extern(parallel_safe, immutable)]

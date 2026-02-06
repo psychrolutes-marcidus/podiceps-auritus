@@ -1,5 +1,5 @@
+use crate::point_to_grid;
 use crate::{Point, PointWTime, PointWZ};
-use crate::{Zoom, point_to_grid};
 use modeling::modeling::LineTriangle;
 use std::cmp;
 
@@ -175,7 +175,6 @@ pub fn signed_total_area(v1x: i32, v1y: i32, v2x: i32, v2y: i32, v3x: i32, v3y: 
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;
-    use geo_types::{Line, Triangle};
     use linesonmaps::types::{linem::LineM, pointm::PointM};
     use modeling::modeling::line_to_triangle_pair;
 
