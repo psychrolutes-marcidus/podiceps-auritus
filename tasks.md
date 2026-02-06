@@ -2,6 +2,8 @@
 - [Refactor postgres extension]
 - [Model linestrings as splines]
 - [Distance to AIS point error]
+- [Model 2D vessels as splines]
+- [2D vessel rotation]
 
 # DOING
 
@@ -22,3 +24,10 @@ Linestrings should be rendered as splines in order to emulate more accurate vess
 We want to measure distance between the sampled cell and the nearest AIS point in order to measures some form of error.
 Please expand further.
 
+## Model 2D vessels as splines
+Once a linestring can be interpreted as a spline it should be straight forward to convert this into continous lines.
+
+## 2D vessel rotation
+A vessel can rotate in its path from one point to another.
+The spline can interprete the larger movements, however, if a vessel reports dimensions (a,b,c,d) then the edges of the vessel will move differently from the spline and cover different areas.
+Therefore, independent rotation around a vessels GPS position is necessary in order to emulate this behaviour.
