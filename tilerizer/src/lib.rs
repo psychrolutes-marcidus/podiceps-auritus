@@ -3,20 +3,20 @@ use data::tables::Ships;
 use geo_types::Coord;
 use itertools::Itertools;
 use linesonmaps::types::{coordm::CoordM, linestringm::LineStringM};
-use pgrx::prelude::*;
+// use pgrx::prelude::*;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 use std::{cmp, sync::Arc};
 
 pub mod tile3d;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, /* Serialize, Deserialize */)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, /* Serialize, Deserialize */)]
 pub struct PointWZ {
     pub point: Point,
     pub z: i32,
@@ -44,7 +44,7 @@ impl Zoom for PointWZ {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize, PostgresType)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, /* Serialize, Deserialize */)]
 pub struct PointWTime {
     pub point: Point,
     pub z: i32,
