@@ -4,6 +4,7 @@
 - [Distance to AIS point error]
 - [Model 2D vessels as splines]
 - [2D vessel rotation]
+- [Compression of vessel trajectories]
 
 # DOING
 
@@ -31,3 +32,9 @@ Once a linestring can be interpreted as a spline it should be straight forward t
 A vessel can rotate in its path from one point to another.
 The spline can interprete the larger movements, however, if a vessel reports dimensions (a,b,c,d) then the edges of the vessel will move differently from the spline and cover different areas.
 Therefore, independent rotation around a vessels GPS position is necessary in order to emulate this behaviour.
+
+## Compression of vessel trajectories
+This task depend on [Model linestrings as splines] to be implemented.
+
+Given a trajectory can be represented as a spline, is it possible to evict an AIS point given that we can interpolate that AIS point, with an error rate by it neighbors.
+
