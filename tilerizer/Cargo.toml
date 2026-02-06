@@ -12,7 +12,6 @@ chrono = { workspace = true }
 geo-types = { workspace = true }
 modeling = { workspace = true }
 serde = { workspace = true }
-pgrx = { workspace = true }
 rayon = { workspace = true }
 
 [dev-dependencies]
