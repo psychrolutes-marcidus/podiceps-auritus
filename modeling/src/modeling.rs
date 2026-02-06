@@ -41,6 +41,26 @@ impl<const CRS: u64> LineTriangle<CRS> {
             self.b,
         )
     }
+    pub fn distance_to_ais(&self,ba: f64, bb: f64, bc: f64) -> f64 {
+        let probe_vec = probe_vector(&self.line, self.triangle, ba, bb, bc);
+        let ratio = probe_ratio(
+            probe_vec,
+            self.line.end().x() - self.line.start().x(),
+            self.line.end().y() - self.line.start().y(),
+        );
+
+        if ratio == 0. || ratio == 1. {
+            return 0.
+        }
+
+        let line_meters = meters_between_points(self.line.from, self.line.to);
+        dbg!(line_meters);
+
+        if ratio <= 0.5 { // point closer to 'line.from'
+            return line_meters*ratio
+        }
+        line_meters*(1.-ratio) // point closer to 'line.to' 
+    }
 }
 
 pub fn barycentric_to_cartesian(triangle: Triangle, ba: f64, bb: f64, bc: f64) -> geo::Coord<f64> {
@@ -192,6 +212,9 @@ mod tests {
         let line = LineM::<4326>::from((coords[0], coords[1]));
 
         let a = line_to_triangle_pair(&line, 1.0, 1.0, 10.0, 10.0);
+        dbg!(a.0.distance_to_ais(1. / 2., 0., 1. / 2.)); // halfway
+        dbg!(a.0.distance_to_ais(1. / 4., 1. / 2., 1. / 4.)); // quarter in
+        
         assert_eq!(
             a.0.point_occupation(1. / 2., 0., 1. / 2.).0.timestamp() as f64 - start_m,
             (end_m - start_m) / 2.0
@@ -219,6 +242,7 @@ mod tests {
             a.0.point_occupation(0., 1., 0.).0.timestamp(),
             start_m as i64
         );
+        dbg!(a.0.distance_to_ais(0., 1., 0.));
         assert_eq!(a.0.point_occupation(0., 1., 0.).1.timestamp(), end_m as i64);
     }
 }
