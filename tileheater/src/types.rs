@@ -7,7 +7,7 @@ use pgrx::prelude::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tilerizer::{
-    draw_2D_vessel, draw_linestring, point_to_grid, tile3d::draw_line_triangle, FilterTile,
+    draw_2d_vessel, draw_linestring, point_to_grid, tile3d::draw_line_triangle, FilterTile,
     PointWTime, Zoom,
 };
 use wkb::reader::Dimension;
@@ -92,7 +92,7 @@ fn render_geom(
             });
             let values = a.zip(b.zip(c.zip(d))).map(|(a, (b, (c, d)))| (a, b, c, d));
             match values {
-                Some((a, b, c, d)) => draw_2D_vessel(
+                Some((a, b, c, d)) => draw_2d_vessel(
                     &linem,
                     a,
                     b,
