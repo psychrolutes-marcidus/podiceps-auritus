@@ -1,14 +1,14 @@
 # TODO
-- [Refactor postgres extension]
 - [Model linestrings as splines]
-- [Distance to AIS point error]
 - [Model 2D vessels as splines]
 - [2D vessel rotation]
 - [Compression of vessel trajectories]
-- [Test suite for proving results]
 - [Git Hooks pre-commit]
 
 # DOING
+- [Refactor postgres extension] (Rasmus)
+- [Test suite for proving results] (Anders)
+- [Distance to AIS point error] (Andrzej)
 
 # DONE
 
