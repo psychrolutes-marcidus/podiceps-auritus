@@ -26,7 +26,7 @@ Linestrings should be rendered as splines in order to emulate more accurate vess
 ## Distance to AIS point error
 We want to measure distance between the sampled cell and the nearest AIS point in order to measures some form of error.
 Please expand further.
-- Distance can be measured via `LineTriangle`, same step as `probe_occupation()` (method used to get timestamp for a interpolated cell)
+- Distance can be measured via `LineTriangle`, same step as `point_occupation()` (method used to get occupation time for interpolated cells)
 - When a cell is 'marked' by our line interpolation, should the distance to ais be:
   - From <center of cell,  probe point, closest probe point*> to <AIS point, center of AIS cell>?
     -  *When probing a `LineTriangle` i assume multiple probes can land in the same cell
