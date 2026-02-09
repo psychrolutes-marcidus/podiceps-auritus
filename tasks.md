@@ -4,6 +4,7 @@
 - [2D vessel rotation]
 - [Compression of vessel trajectories]
 - [Git Hooks pre-commit]
+- [Combine cell probability with metadata]
 
 # DOING
 - [Refactor postgres extension] (Rasmus)
@@ -51,3 +52,9 @@ We should use regression test for this.
 
 ## Git Hooks pre-commit
 To avoid pushing code that will not work or ruin the results in our regression tests, we should have a git hook that runs the tests locally on the machine and verify that everything is working before a commit.
+
+## Combine cell probability with metadata
+Multiple vessels will run through the same cell multiple times.
+Therefore, we should be able to determine a depth from these multiple vessels with a confidence score.
+
+There might be statistical approaches on how to do this while being able to report a confidence score.
