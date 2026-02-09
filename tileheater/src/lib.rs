@@ -209,31 +209,12 @@ fn render_stop_object(
         }
         _ => panic!("Expected Polygon"),
     };
-    let triangles = poly.and_then(|p| p.constrained_triangulation(Default::default()).ok());
-    let points: Option<Vec<_>> = triangles.map(|ts| {
-        ts.iter()
-            .map(|t| draw_triangle(*t, sampling_zoom_level))
-            .flatten()
-            .filter(|p| match filter {
-                Some(ft) => {
-                    let point = p.change_zoom(ft.2);
-                    point.point.x == ft.0 && point.point.y == ft.1
-                }
-                None => true,
-            })
-            .map(|p| p.change_zoom(zoom_level))
-            .map(|p| (p.point.x, p.point.y, p.z))
-            .collect()
-    });
-    let points = points.map(|x| {
-        let mut x = x;
-        x.sort_by_cached_key(|x| *x);
-        let points: Vec<_> = x
-            .chunk_by(|a, b| a == b)
-            .flat_map(|x| x.first().map(|x| x.to_owned()))
-            .collect();
-        points
-    });
+    let points = match poly {
+        Some(poly) => {
+            tilerizer::tile3d::render_stop_object(&poly, zoom_level, sampling_zoom_level, filter)
+        }
+        None => None,
+    };
     match points {
         Some(ps) => TableIterator::new(ps),
         None => TableIterator::empty(),

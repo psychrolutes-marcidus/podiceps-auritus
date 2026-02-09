@@ -1,5 +1,7 @@
-use crate::point_to_grid;
 use crate::{Point, PointWTime, PointWZ};
+use crate::{Zoom, point_to_grid};
+use geo::TriangulateDelaunay;
+use geo_types::Polygon;
 use modeling::modeling::LineTriangle;
 use std::cmp;
 
@@ -21,6 +23,40 @@ impl Triangle {
 
         (bbminx, bbminy, bbmaxx, bbmaxy)
     }
+}
+
+pub fn render_stop_object(
+    poly: &Polygon,
+    zoom_level: i32,
+    sampling_zoom_level: i32,
+    filter_tile: Option<(i32, i32, i32)>,
+) -> Option<Vec<(i32, i32, i32)>> {
+    let triangles = poly.constrained_triangulation(Default::default()).ok();
+    let points: Option<Vec<_>> = triangles.map(|ts| {
+        ts.iter()
+            .map(|t| draw_triangle(*t, sampling_zoom_level))
+            .flatten()
+            .filter(|p| match filter_tile {
+                Some(ft) => {
+                    let point = p.change_zoom(ft.2);
+                    point.point.x == ft.0 && point.point.y == ft.1
+                }
+                None => true,
+            })
+            .map(|p| p.change_zoom(zoom_level))
+            .map(|p| (p.point.x, p.point.y, p.z))
+            .collect()
+    });
+    let points = points.map(|x| {
+        let mut x = x;
+        x.sort_by_cached_key(|x| *x);
+        let points: Vec<_> = x
+            .chunk_by(|a, b| a == b)
+            .flat_map(|x| x.first().map(|x| x.to_owned()))
+            .collect();
+        points
+    });
+    points
 }
 
 pub fn draw_line_triangle(triangle: LineTriangle<4326>, sample_zoom_level: i32) -> Vec<PointWTime> {
