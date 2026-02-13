@@ -5,6 +5,7 @@
 - [Compression of vessel trajectories]
 - [Git Hooks pre-commit]
 - [Combine cell probability with metadata]
+- [Foreign tables in postgres dev environment]
 
 # DOING
 - [Refactor postgres extension] (Rasmus)
@@ -58,3 +59,8 @@ Multiple vessels will run through the same cell multiple times.
 Therefore, we should be able to determine a depth from these multiple vessels with a confidence score.
 
 There might be statistical approaches on how to do this while being able to report a confidence score.
+
+## Foreign tables in postgres dev environment
+We want to load even more data into the database.
+However, it is not possible for us to store all that data on our dev machines.
+Therefore, we should utilise foreign table in postgres to access data on the development server and then use that data together with the developed extension on our local machine.
