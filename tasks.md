@@ -4,14 +4,15 @@
 - [2D vessel rotation]
 - [Compression of vessel trajectories]
 - [Git Hooks pre-commit]
+- [Combine cell probability with metadata]
+- [Foreign tables in postgres dev environment]
 
 # DOING
-- [Refactor postgres extension] (Rasmus)
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
 
 # DONE
-
+- [Refactor postgres extension] (Rasmus)
 
 # Task Descriptions
 
@@ -26,6 +27,11 @@ Linestrings should be rendered as splines in order to emulate more accurate vess
 ## Distance to AIS point error
 We want to measure distance between the sampled cell and the nearest AIS point in order to measures some form of error.
 Please expand further.
+- Distance can be measured via `LineTriangle`, same step as `point_occupation()` (method used to get occupation time for interpolated cells)
+  - `distance_to_ais()` on the `ais-distance` branch measures distance from (shortest path from probe to point on line) to closest AIS point 
+- When a cell is 'marked' by our line interpolation, should the distance to ais be:
+  - From <center of cell,  probe point, probe point projected onto line> to <AIS point, center of AIS cell>?
+    -  Center of cell to <center of AIS cell/AIS point> 'feels' the most 'correct'
 
 ## Model 2D vessels as splines
 Once a linestring can be interpreted as a spline it should be straight forward to convert this into continous lines.
@@ -46,3 +52,14 @@ We should use regression test for this.
 
 ## Git Hooks pre-commit
 To avoid pushing code that will not work or ruin the results in our regression tests, we should have a git hook that runs the tests locally on the machine and verify that everything is working before a commit.
+
+## Combine cell probability with metadata
+Multiple vessels will run through the same cell multiple times.
+Therefore, we should be able to determine a depth from these multiple vessels with a confidence score.
+
+There might be statistical approaches on how to do this while being able to report a confidence score.
+
+## Foreign tables in postgres dev environment
+We want to load even more data into the database.
+However, it is not possible for us to store all that data on our dev machines.
+Therefore, we should utilise foreign table in postgres to access data on the development server and then use that data together with the developed extension on our local machine.

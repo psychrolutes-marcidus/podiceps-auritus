@@ -1,21 +1,10 @@
 use std::hint::unreachable_unchecked;
 
 use chrono::{Datelike, Timelike};
-use linesonmaps::types::{coordm::CoordM, linem::LineM, linestringm::LineStringM, pointm::PointM};
-use modeling::modeling::line_to_triangle_pair;
+use linesonmaps::types::{coordm::CoordM, linestringm::LineStringM, pointm::PointM};
 use pgrx::prelude::*;
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use tilerizer::{draw_linestring, point_to_grid, tile3d::draw_line_triangle, PointWTime, Zoom};
+use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid, FilterTile, PointWTime, Zoom};
 use wkb::reader::Dimension;
-
-#[derive(Clone, Default, PostgresType, Serialize, Deserialize, AggregateName)]
-pub struct RenderPointsAgg {
-    points: Vec<PointWTime>,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct FilterTile(i32, i32, i32);
 
 #[pg_extern(parallel_safe, immutable)]
 fn render_geom(
@@ -97,60 +86,17 @@ fn render_geom(
             });
             let values = a.zip(b.zip(c.zip(d))).map(|(a, (b, (c, d)))| (a, b, c, d));
             match values {
-                Some((a, b, c, d)) => {
-                    let mut points: Vec<_> = linem
-                        .iter()
-                        .map(|lm| {
-                            lm.lines()
-                                .map(|line: LineM<4326>| {
-                                    line_to_triangle_pair(
-                                        &line, a as f64, b as f64, c as f64, d as f64,
-                                    )
-                                })
-                                .flat_map(|(tri1, tri2)| {
-                                    [
-                                        draw_line_triangle(tri1, sampling_zoom_level),
-                                        draw_line_triangle(tri2, sampling_zoom_level),
-                                    ]
-                                })
-                                .flatten()
-                                .map(|x| x.change_zoom(zoom_level))
-                                .collect::<Vec<_>>()
-                        })
-                        .flatten()
-                        .filter(|p: &PointWTime| match filter_tile {
-                            Some(ft) => {
-                                let point = p.change_zoom(ft.2);
-                                point.point.x == ft.0 && point.point.y == ft.1
-                            }
-                            None => true,
-                        })
-                        .collect();
-                    points.par_sort_by_key(|p| (p.point, p.time_start, p.time_end));
-                    points
-                        .par_chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
-                        .map(|p| {
-                            let first = p.first().expect("Chunks are not empty");
-                            let last = p.last().expect("Chunks are not empty");
-                            PointWTime {
-                                time_end: last.time_end,
-                                ..*first
-                            }
-                        })
-                        .collect()
-                }
-                None => linem
-                    .iter()
-                    .map(|lm| draw_linestring(lm, zoom_level, sampling_zoom_level))
-                    .flatten()
-                    .filter(|p| match filter_tile {
-                        Some(ft) => {
-                            let point = p.change_zoom(ft.2);
-                            point.point.x == ft.0 && point.point.y == ft.1
-                        }
-                        None => true,
-                    })
-                    .collect(),
+                Some((a, b, c, d)) => draw_2d_vessel(
+                    &linem,
+                    a,
+                    b,
+                    c,
+                    d,
+                    zoom_level,
+                    sampling_zoom_level,
+                    filter_tile,
+                ),
+                None => draw_linestring(&linem, zoom_level, sampling_zoom_level, filter_tile),
             }
         }
         _ => panic!("Passed unsupported type to function"),

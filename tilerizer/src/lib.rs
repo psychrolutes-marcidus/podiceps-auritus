@@ -1,26 +1,27 @@
 use chrono::prelude::*;
-use data::tables::Ships;
 use geo_types::Coord;
 use itertools::Itertools;
-use linesonmaps::types::{coordm::CoordM, linestringm::LineStringM};
-// use pgrx::prelude::*;
+use linesonmaps::types::{linem::LineM, linestringm::LineStringM};
+use modeling::modeling::line_to_triangle_pair;
 use rayon::prelude::*;
-// use serde::{Deserialize, Serialize};
-use std::{cmp, sync::Arc};
+
+use crate::tile3d::draw_line_triangle;
 
 pub mod tile3d;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy,Hash, /* Serialize, Deserialize */)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, /* Serialize, Deserialize */)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct PointWZ {
     pub point: Point,
     pub z: i32,
 }
+#[derive(Copy, Clone, Debug)]
+pub struct FilterTile(pub i32, pub i32, pub i32);
 
 impl Zoom for PointWZ {
     fn change_zoom(self, zoom_level: i32) -> Self {
@@ -44,7 +45,7 @@ impl Zoom for PointWZ {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone,Hash, /* Serialize, Deserialize */)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone,Hash)]
 pub struct PointWTime {
     pub point: Point,
     pub z: i32,
@@ -52,47 +53,8 @@ pub struct PointWTime {
     pub time_end: DateTime<Utc>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Tile {
-    pub x: i32,
-    pub y: i32,
-    pub z: i32,
-    pub max_draught: Option<f32>,
-    pub distinct_ship_count: u64,
-    pub min_sog: Option<f32>,
-    pub max_sog: Option<f32>,
-    pub cell_oc_time: chrono::TimeDelta,
-    pub min_length: Option<f64>,
-    pub max_length: Option<f64>,
-    pub min_width: Option<f64>,
-    pub max_width: Option<f64>,
-}
-
 pub trait Zoom {
     fn change_zoom(self, zoom_level: i32) -> Self;
-}
-
-impl Zoom for Tile {
-    fn change_zoom(self, zoom_level: i32) -> Self {
-        let change = self.z - zoom_level;
-        let x;
-        let y;
-
-        if change > 0 {
-            x = self.x / 2_i32.pow(change.abs() as u32);
-            y = self.y / 2_i32.pow(change.abs() as u32);
-        } else {
-            x = self.x * 2_i32.pow(change.abs() as u32);
-            y = self.y * 2_i32.pow(change.abs() as u32);
-        }
-
-        Self {
-            x,
-            y,
-            z: zoom_level,
-            ..self
-        }
-    }
 }
 
 impl Zoom for PointWTime {
@@ -129,26 +91,91 @@ impl std::ops::Sub for Point {
 }
 
 pub fn draw_linestring(
-    ls: &LineStringM<4326>,
+    ls: &[&LineStringM<4326>],
     zoom_level: i32,
     sampling_zoom_level: i32,
+    filter_tile: Option<FilterTile>,
 ) -> Vec<PointWTime> {
-    let mut point_ext: Vec<PointWTime> = ls
-        .points()
-        .map(|p| {
-            (
-                point_to_grid((p.coord.x, p.coord.y).into(), sampling_zoom_level),
-                DateTime::from_timestamp_secs(p.coord.m as i64).unwrap(),
-            )
-        })
-        .tuple_windows()
-        .map(|((ap, at), (bp, bt))| enhance_point(draw_line(ap, bp), at, bt, sampling_zoom_level))
-        .flatten()
-        .map(|x| x.change_zoom(zoom_level))
-        .collect();
+    ls.iter()
+        .map(|ls| {
+            let mut point_ext: Vec<PointWTime> = ls
+                .points()
+                .map(|p| {
+                    (
+                        point_to_grid((p.coord.x, p.coord.y).into(), sampling_zoom_level),
+                        DateTime::from_timestamp_secs(p.coord.m as i64).unwrap(),
+                    )
+                })
+                .tuple_windows()
+                .map(|((ap, at), (bp, bt))| {
+                    enhance_point(draw_line(ap, bp), at, bt, sampling_zoom_level)
+                })
+                .flatten()
+                .filter(|p| match filter_tile {
+                    Some(ft) => {
+                        let point = p.change_zoom(ft.2);
+                        point.point.x == ft.0 && point.point.y == ft.1
+                    }
+                    None => true,
+                })
+                .map(|x| x.change_zoom(zoom_level))
+                .collect();
 
-    point_ext.par_sort_by_key(|p| (p.point, p.time_start, p.time_end));
-    point_ext
+            point_ext.par_sort_by_key(|p| (p.point, p.time_start, p.time_end));
+            point_ext
+                .par_chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
+                .map(|p| {
+                    let first = p.first().expect("Chunks are not empty");
+                    let last = p.last().expect("Chunks are not empty");
+                    PointWTime {
+                        time_end: last.time_end,
+                        ..*first
+                    }
+                })
+                .collect::<Vec<PointWTime>>()
+        })
+        .flatten()
+        .collect()
+}
+
+pub fn draw_2d_vessel(
+    ls: &[LineStringM<4326>],
+    a: i16,
+    b: i16,
+    c: i16,
+    d: i16,
+    zoom_level: i32,
+    sampling_zoom_level: i32,
+    filter_tile: Option<FilterTile>,
+) -> Vec<PointWTime> {
+    let mut points: Vec<_> = ls
+        .iter()
+        .map(|lm| {
+            lm.lines()
+                .map(|line: LineM<4326>| {
+                    line_to_triangle_pair(&line, a as f64, b as f64, c as f64, d as f64)
+                })
+                .flat_map(|(tri1, tri2)| {
+                    [
+                        draw_line_triangle(tri1, sampling_zoom_level),
+                        draw_line_triangle(tri2, sampling_zoom_level),
+                    ]
+                })
+                .flatten()
+                .map(|x| x.change_zoom(zoom_level))
+                .collect::<Vec<_>>()
+        })
+        .flatten()
+        .filter(|p: &PointWTime| match filter_tile {
+            Some(ft) => {
+                let point = p.change_zoom(ft.2);
+                point.point.x == ft.0 && point.point.y == ft.1
+            }
+            None => true,
+        })
+        .collect();
+    points.par_sort_by_key(|p| (p.point, p.time_start, p.time_end));
+    points
         .par_chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
         .map(|p| {
             let first = p.first().expect("Chunks are not empty");
@@ -224,86 +251,6 @@ pub fn point_to_grid(point: Coord<f64>, sampling_zoom_level: i32) -> Point {
     Point { x, y }
 }
 
-// fn point_to_tile(point: &PointWTime, mmsi: i32, ship_data: &Arc<Ships>) -> Tile {
-//     let timestamps: &[(DateTime<Utc>, DateTime<Utc>)] = point.time_stamps.as_ref();
-
-//     let (minsog, maxsog) = timestamps
-//         .into_iter()
-//         .map(|x| ship_data.sog.b_tree_index.range((mmsi, x.0)..=(mmsi, x.1)))
-//         .map(|x| x.into_iter().map(|x| ship_data.sog.sog[*x.1]))
-//         .flatten()
-//         .fold(None::<(f32, f32)>, |acc, x| match acc {
-//             Some((min, max)) => Some((min.min(x), max.max(x))),
-//             None => Some((x, x)),
-//         })
-//         .unzip();
-
-//     let draught = timestamps
-//         .into_iter()
-//         .map(|x| ship_data.ship_draught.search_range_by_time(mmsi, x.0, x.1))
-//         .flatten()
-//         .map(|x| ship_data.ship_draught.draught[x])
-//         .reduce(|acc, x| acc.max(x));
-
-//     let (width, length) = ship_data.dimensions.search_by_key(mmsi).ok().unzip();
-
-//     let cell_oc_time: chrono::TimeDelta = timestamps
-//         .into_iter()
-//         .fold(chrono::TimeDelta::nanoseconds(0), |acc, (tb, te)| {
-//             acc + (*te - *tb)
-//         });
-
-//     Tile {
-//         x: point.point.x,
-//         y: point.point.y,
-//         z: point.z,
-//         max_draught: draught,
-//         distinct_ship_count: 1,
-//         min_sog: minsog,
-//         max_sog: maxsog,
-//         cell_oc_time: cell_oc_time,
-//         min_length: length,
-//         max_length: length,
-//         min_width: width,
-//         max_width: width,
-//     }
-// }
-
-pub fn combine_tiles(tiles: &[Tile]) -> Option<Tile> {
-    tiles
-        .into_iter()
-        .cloned()
-        .reduce(|acc, x| combine_2_tiles(&acc, &x))
-}
-
-pub fn combine_2_tiles(a: &Tile, b: &Tile) -> Tile {
-    Tile {
-        max_draught: a.max_draught.map_or(b.max_draught, |a| {
-            b.max_draught.map_or(Some(a), |b| Some(a.max(b)))
-        }),
-        distinct_ship_count: a.distinct_ship_count + b.distinct_ship_count,
-        min_sog: a
-            .min_sog
-            .map_or(b.min_sog, |a| b.min_sog.map_or(Some(a), |b| Some(a.min(b)))),
-        max_sog: a
-            .max_sog
-            .map_or(b.max_sog, |a| b.max_sog.map_or(Some(a), |b| Some(a.max(b)))),
-        cell_oc_time: a.cell_oc_time + b.cell_oc_time,
-        min_length: a.min_length.map_or(b.min_length, |a| {
-            b.min_length.map_or(Some(a), |b| Some(a.min(b)))
-        }),
-        max_length: a.max_length.map_or(b.max_length, |a| {
-            b.max_length.map_or(Some(a), |b| Some(a.max(b)))
-        }),
-        min_width: a.min_width.map_or(b.min_width, |a| {
-            b.min_width.map_or(Some(a), |b| Some(a.min(b)))
-        }),
-        max_width: a.max_width.map_or(b.max_width, |a| {
-            b.max_width.map_or(Some(a), |b| Some(a.max(b)))
-        }),
-        ..a.clone()
-    }
-}
 pub fn point_time_duration(
     time_from: DateTime<Utc>,
     time_to: DateTime<Utc>,
@@ -378,114 +325,6 @@ mod tests {
     }
 
     #[test]
-    fn combine_tiles_same_coord() {
-        let tiles = vec![
-            Tile {
-                x: 0,
-                y: 0,
-                z: 10,
-                max_draught: None,
-                min_sog: Some(1.0),
-                max_sog: None,
-                distinct_ship_count: 1,
-                cell_oc_time: chrono::TimeDelta::seconds(5),
-                min_length: Some(5.0),
-                max_length: Some(5.0),
-                min_width: None,
-                max_width: Some(2.0),
-            },
-            Tile {
-                x: 0,
-                y: 0,
-                z: 10,
-                max_draught: Some(6.0),
-                min_sog: Some(2.0),
-                max_sog: Some(2.0),
-                distinct_ship_count: 1,
-                cell_oc_time: chrono::TimeDelta::seconds(5),
-                min_length: Some(2.0),
-                max_length: Some(2.0),
-                min_width: None,
-                max_width: Some(4.0),
-            },
-        ];
-
-        let result = combine_tiles(&tiles);
-
-        assert_eq!(
-            result.unwrap(),
-            Tile {
-                x: 0,
-                y: 0,
-                z: 10,
-                max_draught: Some(6.),
-                min_sog: Some(1.0),
-                max_sog: Some(2.0),
-                distinct_ship_count: 2,
-                cell_oc_time: chrono::TimeDelta::seconds(10),
-                min_length: Some(2.),
-                max_length: Some(5.),
-                min_width: None,
-                max_width: Some(4.)
-            }
-        );
-    }
-
-    #[test]
-    fn combine_tiles_diff_ships() {
-        let tiles = vec![
-            Tile {
-                x: 0,
-                y: 0,
-                z: 10,
-                max_draught: None,
-                min_sog: Some(1.0),
-                max_sog: None,
-                distinct_ship_count: 1,
-                cell_oc_time: chrono::TimeDelta::seconds(5),
-                min_length: Some(5.),
-                max_length: Some(5.),
-                min_width: None,
-                max_width: Some(2.),
-            },
-            Tile {
-                x: 0,
-                y: 0,
-                z: 10,
-                max_draught: Some(6.),
-                min_sog: Some(2.0),
-                max_sog: Some(2.0),
-                distinct_ship_count: 1,
-                cell_oc_time: chrono::TimeDelta::seconds(5),
-                min_length: Some(2.),
-                max_length: Some(2.),
-                min_width: None,
-                max_width: Some(4.),
-            },
-        ];
-
-        let result = combine_tiles(&tiles);
-
-        assert_eq!(
-            result.unwrap(),
-            Tile {
-                x: 0,
-                y: 0,
-                z: 10,
-                max_draught: Some(6.),
-                min_sog: Some(1.0),
-                max_sog: Some(2.0),
-                distinct_ship_count: 2,
-                cell_oc_time: chrono::TimeDelta::seconds(10),
-                min_length: Some(2.),
-                max_length: Some(5.),
-                min_width: None,
-                max_width: Some(4.)
-            }
-        );
-    }
-
-    #[test]
     fn coord_to_point() {
         let cass_point = Point { x: 34586, y: 20073 }; // At zoom 16
         let cass_4326_coord = Coord::<f64> {
@@ -497,108 +336,4 @@ mod tests {
 
         assert_eq!(cass_point, result);
     }
-
-    #[test]
-    fn test_line_drawing_with_real_world_data() {
-        const HEXSTRING: &str = include_str!("../../resources/line.txt");
-        let bytea = hex::decode(HEXSTRING.trim()).unwrap();
-        let geom = wkb::reader::read_wkb(&bytea).unwrap();
-        let line = LineStringM::<4326>::try_from(geom).unwrap();
-        let result = draw_linestring(line, 5, 6);
-        dbg!(&result);
-
-        assert!(false);
-    }
-
-    // #[test]
-    // fn combine_points() {
-    //     let point = Point { x: 0, y: 0 };
-    //     let points1 = PointWTime {
-    //         point,
-    //         z: 22,
-    //         time_start:
-    //         time_stamps: vec![
-    //             (
-    //                 DateTime::from_timestamp_nanos(1000),
-    //                 DateTime::from_timestamp_nanos(2000),
-    //             ),
-    //             (
-    //                 DateTime::from_timestamp_nanos(3000),
-    //                 DateTime::from_timestamp_nanos(4000),
-    //             ),
-    //         ],
-    //     };
-    //     let points2 = PointWTime {
-    //         point,
-    //         z: 22,
-    //         time_stamps: vec![
-    //             (
-    //                 DateTime::from_timestamp_nanos(5000),
-    //                 DateTime::from_timestamp_nanos(6000),
-    //             ),
-    //             (
-    //                 DateTime::from_timestamp_nanos(1500),
-    //                 DateTime::from_timestamp_nanos(3200),
-    //             ),
-    //         ],
-    //     };
-    //     let comb = PointWTime {
-    //         point,
-    //         z: 22,
-    //         time_stamps: vec![
-    //             (
-    //                 DateTime::from_timestamp_nanos(1000),
-    //                 DateTime::from_timestamp_nanos(4000),
-    //             ),
-    //             (
-    //                 DateTime::from_timestamp_nanos(5000),
-    //                 DateTime::from_timestamp_nanos(6000),
-    //             ),
-    //         ],
-    //     };
-
-    //     let result = combine_point_with_time(&[points1, points2]).unwrap();
-
-    //     assert_eq!(comb, result)
-    // }
-
-    // #[test]
-    // fn draw_linestring_level_0_one_timestamp() {
-    //     let coords = vec![
-    //         CoordM::<4326> {
-    //             x: 9.99077490,
-    //             y: 57.01199765,
-    //             m: 1759393758.,
-    //         },
-    //         CoordM::<4326> {
-    //             x: 12.59321066,
-    //             y: 55.68399700,
-    //             m: 1759397358.,
-    //         },
-    //         CoordM::<4326> {
-    //             x: 8.4437682,
-    //             y: 55.4616713,
-    //             m: 1759400958.,
-    //         },
-    //         CoordM::<4326> {
-    //             x: 11.9732157,
-    //             y: 57.7093381,
-    //             m: 1759404558.,
-    //         },
-    //     ];
-
-    //     let ls = LineStringM::new(coords).unwrap();
-
-    //     let mut points = draw_linestring(ls.clone(), 8, 22);
-
-    //     points.sort_by_cached_key(|a| a.point);
-
-    //     let result: Vec<PointWTime> = points
-    //         .chunk_by(|a, b| a.point == b.point)
-    //         .map(|x| combine_point_with_time(x))
-    //         .flatten()
-    //         .collect();
-
-    //     assert_eq!(result.len(), 9);
-    // }
 }
