@@ -11,9 +11,8 @@ data = { workspace = true }
 chrono = { workspace = true }
 geo-types = { workspace = true }
 modeling = { workspace = true }
-serde = { workspace = true }
-pgrx = { workspace = true }
 rayon = { workspace = true }
+geo = "0.31.0"
 
 [dev-dependencies]
 hex = "0.4.3"

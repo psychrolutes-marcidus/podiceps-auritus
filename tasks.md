@@ -8,12 +8,11 @@
 - [Foreign tables in postgres dev environment]
 
 # DOING
-- [Refactor postgres extension] (Rasmus)
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
 
 # DONE
-
+- [Refactor postgres extension] (Rasmus)
 
 # Task Descriptions
 
