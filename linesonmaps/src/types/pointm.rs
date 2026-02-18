@@ -20,6 +20,15 @@ pub struct PointM<const CRS: u64 = 4326> {
 
 impl<const CRS: u64> PointM<CRS> {}
 
+impl<const CRS: u64> Into<Coord<f64>> for CoordM<CRS> {
+    fn into(self) -> Coord<f64> {
+        Coord {
+            x: self.x,
+            y: self.y,
+        }
+    }
+}
+
 impl<const CRS: u64> From<(f64, f64, f64)> for PointM<CRS> {
     fn from((first, second, third): (f64, f64, f64)) -> Self {
         PointM {
@@ -246,9 +255,8 @@ mod tests {
         let p = PointM::<4326>::try_from(wkb).unwrap();
         // "POINT M (12.613097190856934 56.04176712036133 1704067223)"
 
-        assert_eq!(p.coord.x,12.613097190856934);
-        assert_eq!(p.coord.y,56.04176712036133);
-        assert_eq!(p.coord.m,1704067223_f64);
-
+        assert_eq!(p.coord.x, 12.613097190856934);
+        assert_eq!(p.coord.y, 56.04176712036133);
+        assert_eq!(p.coord.m, 1704067223_f64);
     }
 }

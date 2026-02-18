@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
 use linesonmaps::algo::stop_cluster::DbScanConf;
-use linesonmaps::types::linestringm::LineStringM;
-use linesonmaps::types::pointm::PointM;
-use tilerizer::{PointWTime, draw_linestring};
+use linesonmaps::types::{linem::LineM, linestringm::LineStringM, pointm::PointM};
+use tilerizer::{Point, PointWTime, draw_linestring, point_to_grid};
 
 fn main() {
     println!("Hello, world!");
@@ -13,6 +12,37 @@ fn main() {
     - antal celler renderedet via stop objekts over antal celler renderet via punkter fra stop objekt (stop objekt skulle gerne rendere mindst lige så mange celler i alle tilfælde)
 
 */
+
+fn line_error_from_ground_truth(
+    _gt_p: &PointM<4326>,
+    ls: &LineStringM<4326>,
+    zoom: i32,
+    sampling_zoom: i32,
+) -> () {
+    let ground_truth = ls.points();
+    let ground_truth_cells = ground_truth
+        .map(|p| point_to_grid(p.coord.into(), zoom))
+        .collect::<Vec<_>>();
+    // .collect::<HashSet<Point>>();
+    let cells = draw_linestring(&ls, zoom, sampling_zoom)
+        .into_iter()
+        .map(|pw| pw.point)
+        .collect::<HashSet<Point>>();
+
+    let ground_truth_hashset = HashSet::from_iter(ground_truth_cells);
+    let cells = cells.difference(&ground_truth_hashset).collect::<Vec<_>>();
+    // for each non-ground truth cell, find euclidian distance to nearest ground-truth cell
+    let a = cells
+        .iter()
+        .map(|cp| {
+            ground_truth_cells
+                .iter()
+                .map(|gp| (gp.x - cp.x).abs() + (gp.y - cp.y))
+                .min()
+                .unwrap_or(0)
+        })
+        .collect::<Vec<_>>();
+}
 
 /// error function by #cells generated via linestring with #cells generated via stop object
 fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
