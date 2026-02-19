@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::collections::HashSet;
 use std::f64;
 
@@ -152,9 +151,7 @@ mod test {
     use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
-    use crate::{
-        error_from_ground_truth_geodesic, grid_centroid_to_lng_lat, line_error_from_ground_truth,
-    };
+    use crate::*;
     use tinymvt::webmercator::{lnglat_to_zxy};
 
     #[test]
