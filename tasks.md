@@ -12,6 +12,7 @@
 - [Distance to AIS point error] (Andrzej)
 
 # DONE
+- [Error metrics for non ground-truth cells] (Anders)
 - [Refactor postgres extension] (Rasmus)
 
 # Task Descriptions
