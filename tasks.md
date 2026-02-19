@@ -6,6 +6,8 @@
 - [Git Hooks pre-commit]
 - [Combine cell probability with metadata]
 - [Foreign tables in postgres dev environment]
+- [Implement missing spatial operations in DuckDB]
+- [Port extension to DuckDB]
 
 # DOING
 - [Test suite for proving results] (Anders)
@@ -63,3 +65,17 @@ There might be statistical approaches on how to do this while being able to repo
 We want to load even more data into the database.
 However, it is not possible for us to store all that data on our dev machines.
 Therefore, we should utilise foreign table in postgres to access data on the development server and then use that data together with the developed extension on our local machine.
+
+## Implement missing spatial operations in DuckDB
+DuckDB does not support ST_MakeLine with PointM to LinestringM.
+Therefore, we will investigate if there is a workaround with PointMCollection.
+
+Try to:
+- String manipulate the WKB to convert PointMCollection into LinestringM.
+- If above does not work: Parse WKB and convert it properly in Rust.
+
+## Port extension to DuckDB
+Depending on: [Implement missing spatial operations in DuckDB]
+
+Ditch Postgres and port the extension to DuckDB.
+It minimize the amount of macros and allow us to work with C types instead of having to serialize which PGRX requires.
