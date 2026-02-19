@@ -5,11 +5,12 @@ edition = "2024"
 
 [dependencies]
 geo = "0.32.0"
-hex = "0.4.3"
 linesonmaps = { workspace = true }
 tilerizer = { workspace = true }
-tinymvt = "0.3.0"
 wkb = "0.9.2"
+[dev-dependencies]
+hex = "0.4.3"
+tinymvt = "0.3.0"
 
 [lints]
 workspace = true
