@@ -2,31 +2,61 @@
 use std::collections::HashSet;
 use std::f64;
 
-use geo::{Coord, Point};
+use geo::{Coord, Distance, Euclidean, Geodesic, Point};
 use linesonmaps::algo::stop_cluster::DbScanConf;
 use linesonmaps::types::{linem::LineM, linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, PointWTime, draw_linestring, point_to_grid};
 
-fn main() {
-    println!("Hello, world!");
-}
-
-/* TODO:
-    - mvt grid to polygon<4326>
-
-*/
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
     //TODO: this might map to the northwesternmost point in a grid cell, correct behavior should be centroid
-    // seems to be working
-    let lon = (gp.x as f64 / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
+    // seems to be close enough
+    let lon = ((0.5 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
     let lat = (f64::consts::PI
-        - ((gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
+        - ((0.5 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
         .sinh()
         .atan()
         * (180_f64 / f64::consts::PI);
     Point(Coord { x: lon, y: lat })
+}
+
+pub fn error_from_ground_truth_geodesic(
+    ls: &LineStringM<4326>,
+    zoom: i32,
+    sampling_zoom: i32,
+) -> Vec<(GPoint, f64)> {
+    let ground_truth = ls.points();
+    let ground_truth_cells = ground_truth.map(|p| point_to_grid(p.coord.into(), zoom));
+    let cells = draw_linestring(&[&ls], zoom, sampling_zoom, None)
+        .into_iter()
+        .map(|pw| pw.point)
+        .collect::<HashSet<GPoint>>();
+
+    let ground_truth_hashset = HashSet::from_iter(ground_truth_cells);
+    let cells_diff = cells
+        .difference(&ground_truth_hashset)
+        .cloned()
+        .collect::<Vec<_>>(); // cells that are not ground truth cells
+
+    // for each non-ground truth cell, find geodesic distance to nearest ground-truth point
+    let a = cells_diff
+        .into_iter()
+        .map(|c| {
+            (
+                c,
+                ls.points()
+                    .map(move |gtp| ground_truth_to_cell_geodesic(gtp, &c, zoom as u8))
+                    .min_by(|x, y| x.total_cmp(y))
+                    .unwrap_or(0.0),
+            )
+        })
+        .collect::<Vec<_>>();
+    a
+}
+
+fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u8) -> f64 {
+    Geodesic.distance(grid_centroid_to_lng_lat(*gp, zoom), p.into())
 }
 
 fn line_error_from_ground_truth(
@@ -38,7 +68,6 @@ fn line_error_from_ground_truth(
     let ground_truth_cells = ground_truth
         .map(|p| point_to_grid(p.coord.into(), zoom))
         .collect::<Vec<_>>();
-    // .collect::<HashSet<Point>>();
     let cells = draw_linestring(&[&ls], zoom, sampling_zoom, None)
         .into_iter()
         .map(|pw| pw.point)
@@ -49,9 +78,8 @@ fn line_error_from_ground_truth(
         .difference(&ground_truth_hashset)
         .cloned()
         .collect::<Vec<_>>();
-    // for each non-ground truth cell, find euclidian distance to nearest ground-truth cell
-    // let cells_with_distances = cells.into_iter().map(|cp| {ground_truth_cells});
 
+    //for each cell, find taxicab distance to nearest ground-truth cell
     let a = cells
         .iter()
         .map(|cp| {
@@ -68,6 +96,7 @@ fn line_error_from_ground_truth(
     a
 }
 
+//TODO: not really tested
 /// error function by #cells generated via linestring with #cells generated via stop object
 fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
     ls: &LineStringM<4326>,
@@ -114,7 +143,6 @@ fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + S
 
 mod test {
     use geo::{Coord, Point};
-    // #![allow(dead_code)]
     use hex;
     use linesonmaps::types::coordm::CoordM;
     use linesonmaps::types::linestringm::LineStringM;
@@ -122,7 +150,9 @@ mod test {
     use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
-    use crate::{grid_centroid_to_lng_lat, line_error_from_ground_truth};
+    use crate::{
+        error_from_ground_truth_geodesic, grid_centroid_to_lng_lat, line_error_from_ground_truth,
+    };
     use tinymvt::webmercator::{lnglat_to_web_mercator, lnglat_to_zxy, web_mercator_to_zxy};
 
     #[test]
@@ -156,6 +186,22 @@ mod test {
             "no error value can be 0 since it only reports for non-ground truth cells"
         );
         // dbg!(&e);
+        // assert!(false)
+    }
+    #[test]
+    fn cell_error_euclidean() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+
+        let e = error_from_ground_truth_geodesic(&lsm, 19, 19);
+        assert!(
+            e.iter().all(|(_, d)| *d > 0.0),
+            "no error value can be 0 since it only reports for non-ground truth cells"
+        );
+        dbg!(&e);
         assert!(false)
     }
 
@@ -172,7 +218,9 @@ mod test {
             },
             grid.0,
         );
-
+        // dbg!(&grid);
+        // dbg!(ry);
+        // assert!(false);
         assert!((x - rx).abs() < 1.0E-5, ":((( {0}", (x - rx).abs());
         assert!((y - ry).abs() < 1.0E-5, ":((( {0}", (y - ry).abs());
     }
