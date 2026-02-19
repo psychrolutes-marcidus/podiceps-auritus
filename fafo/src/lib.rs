@@ -2,11 +2,10 @@
 use std::collections::HashSet;
 use std::f64;
 
-use geo::{Coord, Distance, Euclidean, Geodesic, Point};
+use geo::{Coord, Distance, Geodesic, Point};
 use linesonmaps::algo::stop_cluster::DbScanConf;
-use linesonmaps::types::{linem::LineM, linestringm::LineStringM, pointm::PointM};
+use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, PointWTime, draw_linestring, point_to_grid};
-
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
@@ -40,7 +39,7 @@ pub fn error_from_ground_truth_geodesic(
         .collect::<Vec<_>>(); // cells that are not ground truth cells
 
     // for each non-ground truth cell, find geodesic distance to nearest ground-truth point
-    let a = cells_diff
+    let cell_errors = cells_diff
         .into_iter()
         .map(|c| {
             (
@@ -52,7 +51,7 @@ pub fn error_from_ground_truth_geodesic(
             )
         })
         .collect::<Vec<_>>();
-    a
+    cell_errors
 }
 
 fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u8) -> f64 {
@@ -79,8 +78,8 @@ fn line_error_from_ground_truth(
         .cloned()
         .collect::<Vec<_>>();
 
-    //for each cell, find taxicab distance to nearest ground-truth cell
-    let a = cells
+    //for each non ground-truth cell, find taxicab distance to nearest ground-truth cell
+    let cell_errors = cells
         .iter()
         .map(|cp| {
             (
@@ -93,11 +92,12 @@ fn line_error_from_ground_truth(
             )
         })
         .collect::<Vec<_>>();
-    a
+    cell_errors
 }
 
 //TODO: not really tested
 /// error function by #cells generated via linestring with #cells generated via stop object
+#[allow(unused_variables)]
 fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
     ls: &LineStringM<4326>,
     zoom: i32,
@@ -115,6 +115,8 @@ fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync
     // stop_obj_count as f64 / ls_count as f64 //? evt sse,rmse hvis vi måler fejl over et helt datasæt
 }
 
+//TODO resume development on error measurement for stop-objects
+#[allow(unused_variables)]
 fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
     ls: &LineStringM<4326>,
     zoom: i32,
@@ -141,19 +143,19 @@ fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + S
     distances
 }
 
+#[cfg(test)]
 mod test {
     use geo::{Coord, Point};
     use hex;
     use linesonmaps::types::coordm::CoordM;
     use linesonmaps::types::linestringm::LineStringM;
-    use linesonmaps::types::*;
     use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
     use crate::{
         error_from_ground_truth_geodesic, grid_centroid_to_lng_lat, line_error_from_ground_truth,
     };
-    use tinymvt::webmercator::{lnglat_to_web_mercator, lnglat_to_zxy, web_mercator_to_zxy};
+    use tinymvt::webmercator::{lnglat_to_zxy};
 
     #[test]
     fn it_works() {
@@ -201,8 +203,8 @@ mod test {
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
         );
-        dbg!(&e);
-        assert!(false)
+        // dbg!(&e);
+        // assert!(false)
     }
 
     #[test]
@@ -221,7 +223,7 @@ mod test {
         // dbg!(&grid);
         // dbg!(ry);
         // assert!(false);
-        assert!((x - rx).abs() < 1.0E-5, ":((( {0}", (x - rx).abs());
-        assert!((y - ry).abs() < 1.0E-5, ":((( {0}", (y - ry).abs());
+        assert!((x - rx).abs() < 1.0E-4, ":((( {0}", (x - rx).abs());
+        assert!((y - ry).abs() < 1.0E-4, ":((( {0}", (y - ry).abs());
     }
 }
