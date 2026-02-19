@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::collections::HashSet;
 
 use linesonmaps::algo::stop_cluster::DbScanConf;
@@ -8,40 +9,48 @@ fn main() {
     println!("Hello, world!");
 }
 
-/* idéer til fejlmetrikker ift. stop objetker
-    - antal celler renderedet via stop objekts over antal celler renderet via punkter fra stop objekt (stop objekt skulle gerne rendere mindst lige så mange celler i alle tilfælde)
-
+/* TODO:
+    - mvt grid to polygon<4326>
+    
 */
 
 fn line_error_from_ground_truth(
-    _gt_p: &PointM<4326>,
     ls: &LineStringM<4326>,
     zoom: i32,
     sampling_zoom: i32,
-) -> () {
+) -> Vec<(Point, i32)> {
     let ground_truth = ls.points();
     let ground_truth_cells = ground_truth
         .map(|p| point_to_grid(p.coord.into(), zoom))
         .collect::<Vec<_>>();
     // .collect::<HashSet<Point>>();
-    let cells = draw_linestring(&ls, zoom, sampling_zoom)
+    let cells = draw_linestring(&[&ls], zoom, sampling_zoom, None)
         .into_iter()
         .map(|pw| pw.point)
         .collect::<HashSet<Point>>();
 
     let ground_truth_hashset = HashSet::from_iter(ground_truth_cells);
-    let cells = cells.difference(&ground_truth_hashset).collect::<Vec<_>>();
+    let cells = cells
+        .difference(&ground_truth_hashset)
+        .cloned()
+        .collect::<Vec<_>>();
     // for each non-ground truth cell, find euclidian distance to nearest ground-truth cell
+    // let cells_with_distances = cells.into_iter().map(|cp| {ground_truth_cells});
+
     let a = cells
         .iter()
         .map(|cp| {
-            ground_truth_cells
-                .iter()
-                .map(|gp| (gp.x - cp.x).abs() + (gp.y - cp.y))
-                .min()
-                .unwrap_or(0)
+            (
+                *cp,
+                ground_truth_hashset
+                    .iter()
+                    .map(|gp| (gp.x - cp.x).abs() + (gp.y - cp.y).abs())
+                    .min()
+                    .unwrap_or(0),
+            )
         })
         .collect::<Vec<_>>();
+    a
 }
 
 /// error function by #cells generated via linestring with #cells generated via stop object
@@ -53,7 +62,7 @@ fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync
     // let ls_count = draw_linestring(ls, zoom, zoom).len();
     // let stop_obj_count = todo!();
 
-    let ls_cells = draw_linestring(ls, zoom, zoom)
+    let ls_cells = draw_linestring(&[ls], zoom, zoom, None)
         .into_iter()
         .collect::<HashSet<PointWTime>>();
     let stop_obj_cells: HashSet<PointWTime> = todo!();
@@ -67,7 +76,7 @@ fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + S
     zoom: i32,
     conf: DbScanConf<Dist, 4326>,
 ) -> f64 {
-    let ls_cells = draw_linestring(ls, zoom, zoom)
+    let ls_cells = draw_linestring(&[ls], zoom, zoom, None)
         .into_iter()
         .collect::<HashSet<PointWTime>>();
     let stop_obj_cells: HashSet<PointWTime> = todo!();
@@ -89,10 +98,15 @@ fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + S
 }
 
 mod test {
+    // #![allow(dead_code)]
+    use hex;
     use linesonmaps::types::coordm::CoordM;
     use linesonmaps::types::linestringm::LineStringM;
     use linesonmaps::types::*;
     use tilerizer::draw_linestring;
+    use wkb::reader::read_wkb;
+
+    use crate::line_error_from_ground_truth;
 
     #[test]
     fn it_works() {
@@ -106,8 +120,23 @@ mod test {
         .map(|f| f.into())
         .to_vec(); // i.e. a square from (0,0) to (1,1)
         let ls = LineStringM::try_from(coords.clone()).unwrap();
-        let cells = draw_linestring(&ls, 21, 21);
+        let cells = draw_linestring(&[&ls], 21, 21, None);
         assert!(cells.len() > 0);
         //TODO render same linestring, but with use of stop object (should cause an explosion in cell count)
+    }
+
+    #[test]
+    fn cell_error() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+
+
+        let e = line_error_from_ground_truth(&lsm, 19, 19);
+        assert!(e.iter().all(|(_,d)| *d>0), "no error value can be 0 since it only reports for non-ground truth cells");
+        dbg!(&e);
+        assert!(false)
     }
 }
