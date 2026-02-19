@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 use std::collections::HashSet;
+use std::f64;
 
+use geo::{Coord, Point};
 use linesonmaps::algo::stop_cluster::DbScanConf;
 use linesonmaps::types::{linem::LineM, linestringm::LineStringM, pointm::PointM};
-use tilerizer::{Point, PointWTime, draw_linestring, point_to_grid};
+use tilerizer::{Point as GPoint, PointWTime, draw_linestring, point_to_grid};
 
 fn main() {
     println!("Hello, world!");
@@ -11,14 +13,27 @@ fn main() {
 
 /* TODO:
     - mvt grid to polygon<4326>
-    
+
 */
+
+// implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
+fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
+    //TODO: this might map to the northwesternmost point in a grid cell, correct behavior should be centroid
+    // seems to be working
+    let lon = (gp.x as f64 / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
+    let lat = (f64::consts::PI
+        - ((gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
+        .sinh()
+        .atan()
+        * (180_f64 / f64::consts::PI);
+    Point(Coord { x: lon, y: lat })
+}
 
 fn line_error_from_ground_truth(
     ls: &LineStringM<4326>,
     zoom: i32,
     sampling_zoom: i32,
-) -> Vec<(Point, i32)> {
+) -> Vec<(GPoint, i32)> {
     let ground_truth = ls.points();
     let ground_truth_cells = ground_truth
         .map(|p| point_to_grid(p.coord.into(), zoom))
@@ -27,7 +42,7 @@ fn line_error_from_ground_truth(
     let cells = draw_linestring(&[&ls], zoom, sampling_zoom, None)
         .into_iter()
         .map(|pw| pw.point)
-        .collect::<HashSet<Point>>();
+        .collect::<HashSet<GPoint>>();
 
     let ground_truth_hashset = HashSet::from_iter(ground_truth_cells);
     let cells = cells
@@ -98,15 +113,17 @@ fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + S
 }
 
 mod test {
+    use geo::{Coord, Point};
     // #![allow(dead_code)]
     use hex;
     use linesonmaps::types::coordm::CoordM;
     use linesonmaps::types::linestringm::LineStringM;
     use linesonmaps::types::*;
-    use tilerizer::draw_linestring;
+    use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
-    use crate::line_error_from_ground_truth;
+    use crate::{grid_centroid_to_lng_lat, line_error_from_ground_truth};
+    use tinymvt::webmercator::{lnglat_to_web_mercator, lnglat_to_zxy, web_mercator_to_zxy};
 
     #[test]
     fn it_works() {
@@ -133,10 +150,30 @@ mod test {
         let wkb = read_wkb(&bytea).unwrap();
         let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
 
-
         let e = line_error_from_ground_truth(&lsm, 19, 19);
-        assert!(e.iter().all(|(_,d)| *d>0), "no error value can be 0 since it only reports for non-ground truth cells");
-        dbg!(&e);
+        assert!(
+            e.iter().all(|(_, d)| *d > 0),
+            "no error value can be 0 since it only reports for non-ground truth cells"
+        );
+        // dbg!(&e);
         assert!(false)
+    }
+
+    #[test]
+    fn grid_to_lng_lat_works() {
+        let Point(Coord { x, y }) = Point(Coord { x: 45.0, y: 45.0 });
+
+        let grid = lnglat_to_zxy(21, x, y);
+
+        let Point(Coord { x: rx, y: ry }) = grid_centroid_to_lng_lat(
+            GPoint {
+                x: grid.1 as i32,
+                y: grid.2 as i32,
+            },
+            grid.0,
+        );
+
+        assert!((x - rx).abs() < 1.0E-5, ":((( {0}", (x - rx).abs());
+        assert!((y - ry).abs() < 1.0E-5, ":((( {0}", (y - ry).abs());
     }
 }
