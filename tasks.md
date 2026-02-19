@@ -76,6 +76,7 @@ Try to:
 
 ## Port extension to DuckDB
 Depending on: [Implement missing spatial operations in DuckDB]
+Remove this task at completion: [Foreign tables in postgres dev environment]
 
 Ditch Postgres and port the extension to DuckDB.
 It minimize the amount of macros and allow us to work with C types instead of having to serialize which PGRX requires.
