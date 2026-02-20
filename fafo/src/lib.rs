@@ -110,7 +110,7 @@ impl ErrorMeasurementConf {
 }
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
+pub fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
     //TODO: this might map to the northwesternmost point in a grid cell, correct behavior should be centroid
     // seems to be close enough
     let lon = ((0.5 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
