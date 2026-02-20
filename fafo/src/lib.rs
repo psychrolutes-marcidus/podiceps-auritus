@@ -290,6 +290,78 @@ mod test {
         // assert!(false)
     }
     #[test]
+    fn cell_error_euclidean_2d_typed_builder() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+
+        let ls_conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::Geodesic)
+            .zoom(19)
+            .rendering_model(RenderingModel::Linestring)
+            .build();
+        let conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::Geodesic)
+            .zoom(19)
+            .rendering_model(RenderingModel::TwoDimensional {
+                a: 10,
+                b: 10,
+                c: 10,
+                d: 10,
+            })
+            .build();
+
+        assert_eq!(conf.sampling, None);
+        let e = conf.measure_error(&lsm);
+        let ls_e = ls_conf.measure_error(&lsm);
+        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
+        assert!(
+            e.iter().all(|(_, d)| *d > 0.0),
+            "no error value can be 0 since it only reports for non-ground truth cells"
+        );
+        assert!(
+            ls_e.len() < e.len(),
+            "2d renderer should render at least as many points"
+        );
+        // dbg!(&e);
+        // assert!(false)
+    }
+    #[test]
+    fn cell_error_euclidean_super_sampling_typed_builder() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+
+        let ss_conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::Geodesic)
+            .zoom(19)
+            .sampling(21)
+            .rendering_model(RenderingModel::Linestring)
+            .build();
+        let conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::Geodesic)
+            .zoom(19)
+            .rendering_model(RenderingModel::Linestring)
+            .build();
+
+        assert_eq!(conf.sampling, None);
+        let e = conf.measure_error(&lsm);
+        let ss_e = ss_conf.measure_error(&lsm);
+        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
+        assert!(
+            e.iter().all(|(_, d)| *d > 0.0),
+            "no error value can be 0 since it only reports for non-ground truth cells"
+        );
+        assert!(
+            ss_e.len() > e.len(),
+            "super sampling should result in at least as many cells"
+        );
+    }
+    #[test]
     fn grid_to_lng_lat_works() {
         let Point(Coord { x, y }) = Point(Coord { x: 45.0, y: 45.0 });
 
