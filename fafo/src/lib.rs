@@ -19,7 +19,8 @@ fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
     Point(Coord { x: lon, y: lat })
 }
 
-pub fn error_from_ground_truth_geodesic(
+/// Measures sum of error for cells, at the given zoom level, that do not contain any ground-truth point. Points in the linestring are considered ground-truth point
+pub fn line_error_from_ground_truth_geodesic(
     ls: &LineStringM<4326>,
     zoom: i32,
     sampling_zoom: i32,
@@ -57,7 +58,8 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
     Geodesic.distance(grid_centroid_to_lng_lat(*gp, zoom), p.into())
 }
 
-fn line_error_from_ground_truth(
+/// Measures sum of error for cells, at the given zoom level, that do not contain any ground-truth point. Points in the linestring are considered ground-truth point
+pub fn line_error_from_ground_truth(
     ls: &LineStringM<4326>,
     zoom: i32,
     sampling_zoom: i32,
@@ -152,7 +154,7 @@ mod test {
     use wkb::reader::read_wkb;
 
     use crate::*;
-    use tinymvt::webmercator::{lnglat_to_zxy};
+    use tinymvt::webmercator::lnglat_to_zxy;
 
     #[test]
     fn it_works() {
@@ -195,7 +197,7 @@ mod test {
         let wkb = read_wkb(&bytea).unwrap();
         let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
 
-        let e = error_from_ground_truth_geodesic(&lsm, 19, 19);
+        let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
