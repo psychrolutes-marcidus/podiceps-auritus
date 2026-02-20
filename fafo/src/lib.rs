@@ -20,7 +20,7 @@ pub struct ErrorMeasurementConf {
 pub enum ErrorMeasurementMethod {
     /// Measures geodesic distance from cell centroid to nearest ground truth point.
     Geodesic,
-    /// measures distance in terms of horizontal cell distance + vertical cell distance
+    /// measures distance in terms of horizontal cell distance + vertical cell distance (i.e. an adjacent cell would have distance 1, while a diagonally adjacent cell would have distance 2)
     CellTaxicab,
 }
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +33,7 @@ pub enum RenderingModel {
 
 impl ErrorMeasurementConf {
     //TODO maybe there should be a function here for aggregating errors across multiple trajectories, but i do not know if it needs any more parameters
+    /// Assigns error value to every rendered non ground-truth cell
     pub fn measure_error(self, ls: &LineStringM<4326>) -> Vec<(GPoint, f64)> {
         self.calculate_error(
             ls,
