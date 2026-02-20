@@ -12,6 +12,7 @@
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
+- [Calculate confidence for a cell given a vessel] (Rasmus)
 
 # DONE
 - [Refactor postgres extension] (Rasmus)
@@ -80,3 +81,10 @@ Remove this task at completion: [Foreign tables in postgres dev environment]
 
 Ditch Postgres and port the extension to DuckDB.
 It minimize the amount of macros and allow us to work with C types instead of having to serialize which PGRX requires.
+
+## Calculate confidence for a cell given a vessel
+The system should, as per iteration 2, be able to give a confidence score of how likely a vessel draught is possible to do in a given area.
+This is based on a statistical probabilistic model.
+
+- Analyse usual behaviour for each vessel.
+  - What is a normal reported draught.
