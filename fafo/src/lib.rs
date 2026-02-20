@@ -28,7 +28,7 @@ pub enum RenderingModel {
     /// Model ship movement as a linestring
     Linestring,
     /// Model ship movement as a moving polygon (i.e. linestring with width)
-    TwoDimensional { a: u16, b: u16, c: u16, d: u16 },
+    TwoDimensional { a: u16, b: u16, c: u16, d: u16 }, // TODO this is bad since a single ErrorMeasurementConf no longer works across vessels with different dimensions
 }
 
 impl ErrorMeasurementConf {
@@ -119,42 +119,6 @@ fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
         .atan()
         * (180_f64 / f64::consts::PI);
     Point(Coord { x: lon, y: lat })
-}
-
-/// Measures sum of error for cells, at the given zoom level, that do not contain any ground-truth point. Points in the linestring are considered ground-truth point
-#[deprecated = "use `ErrorMeasurementConf` instead"]
-fn line_error_from_ground_truth_geodesic(
-    ls: &LineStringM<4326>,
-    zoom: i32,
-    sampling_zoom: i32,
-) -> Vec<(GPoint, f64)> {
-    let ground_truth = ls.points();
-    let ground_truth_cells = ground_truth.map(|p| point_to_grid(p.coord.into(), zoom));
-    let cells = draw_linestring(&[&ls], zoom, sampling_zoom, None)
-        .into_iter()
-        .map(|pw| pw.point)
-        .collect::<HashSet<GPoint>>();
-
-    let ground_truth_hashset = HashSet::from_iter(ground_truth_cells);
-    let cells_diff = cells
-        .difference(&ground_truth_hashset)
-        .cloned()
-        .collect::<Vec<_>>(); // cells that are not ground truth cells
-
-    // for each non-ground truth cell, find geodesic distance to nearest ground-truth point
-    let cell_errors = cells_diff
-        .into_iter()
-        .map(|c| {
-            (
-                c,
-                ls.points()
-                    .map(move |gtp| ground_truth_to_cell_geodesic(gtp, &c, zoom as u8))
-                    .min_by(|x, y| x.total_cmp(y))
-                    .unwrap_or(0.0),
-            )
-        })
-        .collect::<Vec<_>>();
-    cell_errors
 }
 
 fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u8) -> f64 {
@@ -285,23 +249,15 @@ mod test {
         let wkb = read_wkb(&bytea).unwrap();
         let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
 
-        let e = line_error_from_ground_truth(&lsm, 19, 19);
-        assert!(
-            e.iter().all(|(_, d)| *d > 0),
-            "no error value can be 0 since it only reports for non-ground truth cells"
-        );
-        // dbg!(&e);
-        // assert!(false)
-    }
-    #[test]
-    fn cell_error_euclidean() {
-        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+        let conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::CellTaxicab)
+            .zoom(19)
+            .rendering_model(RenderingModel::Linestring)
+            .build();
 
-        let bytea = hex::decode(HEXSTRING).unwrap();
-        let wkb = read_wkb(&bytea).unwrap();
-        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
-
-        let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
+        assert_eq!(conf.sampling, None);
+        let e = conf.measure_error(&lsm);
+        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
