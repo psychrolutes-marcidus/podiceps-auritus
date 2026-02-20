@@ -122,6 +122,7 @@ fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
 }
 
 /// Measures sum of error for cells, at the given zoom level, that do not contain any ground-truth point. Points in the linestring are considered ground-truth point
+#[deprecated = "use `ErrorMeasurementConf` instead"]
 fn line_error_from_ground_truth_geodesic(
     ls: &LineStringM<4326>,
     zoom: i32,
@@ -161,6 +162,7 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
 }
 
 /// Measures sum of error for cells, at the given zoom level, that do not contain any ground-truth point. Points in the linestring are considered ground-truth point
+#[deprecated = "use `ErrorMeasurementConf` instead"]
 fn line_error_from_ground_truth(
     ls: &LineStringM<4326>,
     zoom: i32,
