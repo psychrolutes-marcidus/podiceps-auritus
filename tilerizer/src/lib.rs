@@ -139,7 +139,7 @@ pub fn draw_linestring(
 }
 
 pub fn draw_2d_vessel(
-    ls: &[LineStringM<4326>],
+    ls: &[&LineStringM<4326>],
     a: i16,
     b: i16,
     c: i16,
