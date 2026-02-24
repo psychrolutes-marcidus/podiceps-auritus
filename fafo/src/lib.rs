@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashSet;
 use std::f64;
 
@@ -10,7 +11,7 @@ use typed_builder::TypedBuilder;
 #[derive(Debug, Clone, Copy, TypedBuilder)]
 pub struct ErrorMeasurementConf {
     method: ErrorMeasurementMethod,
-    rendering_model: RenderingModel,
+    // rendering_model: RenderingModel,
     zoom: u8,
     #[builder(default, setter(strip_option))]
     sampling: Option<u8>,
@@ -34,15 +35,65 @@ pub enum RenderingModel {
 impl ErrorMeasurementConf {
     //TODO maybe there should be a function here for aggregating errors across multiple trajectories, but i do not know if it needs any more parameters
     /// Assigns error value to every rendered non ground-truth cell
-    pub fn measure_error(self, ls: &LineStringM<4326>) -> Vec<(GPoint, f64)> {
+    pub fn measure_error(
+        self,
+        ls: &LineStringM<4326>,
+        rendering_model: RenderingModel,
+    ) -> Vec<(GPoint, f64)> {
         self.calculate_error(
             ls,
             &self
-                .generate_cells(ls)
+                .generate_cells(ls, rendering_model)
                 .difference(&self.ground_truth_cells(ls))
                 .cloned()
                 .collect(),
         )
+    }
+
+    //TODO: this will not necesarilly give the same result at `measure_error`, since it only has two points-worth of context (in opposed to a linestring)
+    pub fn error_to_ground_truth(
+        &self,
+        (f, s): (PointM<4326>, PointM<4326>),
+        cells: &[GPoint],
+    ) -> Vec<(GPoint, f64)> {
+        let interpolated_cells = cells.iter().filter(|p| {
+            **p == point_to_grid(f.coord.into(), self.zoom.into())
+                || **p == point_to_grid(s.coord.into(), self.zoom.into())
+        });
+
+        interpolated_cells
+            .map(|ic| self.cell_to_nearest_ground_truth((f, s), ic))
+            .collect()
+    }
+
+    fn cell_to_nearest_ground_truth(
+        &self,
+        (f, s): (PointM<4326>, PointM<4326>),
+        gp: &GPoint,
+    ) -> (GPoint, f64) {
+        match self.method {
+            ErrorMeasurementMethod::CellTaxicab => {
+                let (fc, sc) = (
+                    point_to_grid(s.coord.into(), self.zoom.into()),
+                    point_to_grid(f.coord.into(), self.zoom.into()),
+                );
+                let gp_to_fc = (fc.x - gp.x).abs() + (fc.y - gp.y).abs();
+                let gp_to_sc = (sc.x - gp.x).abs() + (sc.y - gp.y).abs();
+                if gp_to_fc < gp_to_sc {
+                    (*gp, gp_to_fc as f64)
+                } else {
+                    (*gp, gp_to_sc as f64)
+                }
+            }
+            ErrorMeasurementMethod::Geodesic => {
+                let first = ground_truth_to_cell_geodesic(f, gp, self.zoom);
+                let second = ground_truth_to_cell_geodesic(s, gp, self.zoom);
+                let min = first.min(second);
+                (*gp, min)
+            }
+        }
+
+        // todo!()
     }
     fn calculate_error(
         &self,
@@ -74,8 +125,12 @@ impl ErrorMeasurementConf {
                 .unwrap_or(0.0),
         }
     }
-    fn generate_cells(&self, gt_ls: &LineStringM<4326>) -> HashSet<GPoint> {
-        let points = match self.rendering_model {
+    fn generate_cells(
+        &self,
+        gt_ls: &LineStringM<4326>,
+        rendering_model: RenderingModel,
+    ) -> HashSet<GPoint> {
+        let points = match rendering_model {
             RenderingModel::Linestring => draw_linestring(
                 &[gt_ls.to_owned()],
                 self.zoom.into(),
@@ -254,11 +309,11 @@ mod test {
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::CellTaxicab)
             .zoom(19)
-            .rendering_model(RenderingModel::Linestring)
+            // .rendering_model(RenderingModel::Linestring)
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm);
+        let e = conf.measure_error(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -278,11 +333,11 @@ mod test {
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            .rendering_model(RenderingModel::Linestring)
+            // .rendering_model(RenderingModel::Linestring)
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm);
+        let e = conf.measure_error(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -302,22 +357,30 @@ mod test {
         let ls_conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            .rendering_model(RenderingModel::Linestring)
+            // .rendering_model(RenderingModel::Linestring)
             .build();
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            .rendering_model(RenderingModel::TwoDimensional {
+            // .rendering_model(RenderingModel::TwoDimensional {
+            //     a: 10,
+            //     b: 10,
+            //     c: 10,
+            //     d: 10,
+            // })
+            .build();
+
+        assert_eq!(conf.sampling, None);
+        let e = conf.measure_error(
+            &lsm,
+            RenderingModel::TwoDimensional {
                 a: 10,
                 b: 10,
                 c: 10,
                 d: 10,
-            })
-            .build();
-
-        assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm);
-        let ls_e = ls_conf.measure_error(&lsm);
+            },
+        );
+        let ls_e = ls_conf.measure_error(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -342,17 +405,17 @@ mod test {
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
             .sampling(21)
-            .rendering_model(RenderingModel::Linestring)
+            // .rendering_model(RenderingModel::Linestring)
             .build();
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            .rendering_model(RenderingModel::Linestring)
+            // .rendering_model(RenderingModel::Linestring)
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm);
-        let ss_e = ss_conf.measure_error(&lsm);
+        let e = conf.measure_error(&lsm, RenderingModel::Linestring);
+        let ss_e = ss_conf.measure_error(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
