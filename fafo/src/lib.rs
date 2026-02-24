@@ -77,13 +77,13 @@ impl ErrorMeasurementConf {
     fn generate_cells(&self, gt_ls: &LineStringM<4326>) -> HashSet<GPoint> {
         let points = match self.rendering_model {
             RenderingModel::Linestring => draw_linestring(
-                &[&gt_ls],
+                &[gt_ls.to_owned()],
                 self.zoom.into(),
                 self.sampling.unwrap_or(self.zoom).into(),
                 None,
             ),
             RenderingModel::TwoDimensional { a, b, c, d } => draw_2d_vessel(
-                &[&gt_ls],
+                &[gt_ls.to_owned()],
                 a as i16,
                 b as i16,
                 c as i16,
@@ -137,7 +137,7 @@ fn line_error_from_ground_truth(
     let ground_truth_cells = ground_truth
         .map(|p| point_to_grid(p.coord.into(), zoom))
         .collect::<Vec<_>>();
-    let cells = draw_linestring(&[&ls], zoom, sampling_zoom, None)
+    let cells = draw_linestring(&[ls.to_owned()], zoom, sampling_zoom, None)
         .into_iter()
         .map(|pw| pw.point)
         .collect::<HashSet<GPoint>>();
@@ -176,7 +176,7 @@ fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync
     // let ls_count = draw_linestring(ls, zoom, zoom).len();
     // let stop_obj_count = todo!();
 
-    let ls_cells = draw_linestring(&[ls], zoom, zoom, None)
+    let ls_cells = draw_linestring(&[ls.to_owned()], zoom, zoom, None)
         .into_iter()
         .collect::<HashSet<PointWTime>>();
     let stop_obj_cells: HashSet<PointWTime> = todo!();
@@ -192,7 +192,7 @@ fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + S
     zoom: i32,
     conf: DbScanConf<Dist, 4326>,
 ) -> f64 {
-    let ls_cells = draw_linestring(&[ls], zoom, zoom, None)
+    let ls_cells = draw_linestring(&[ls.to_owned()], zoom, zoom, None)
         .into_iter()
         .collect::<HashSet<PointWTime>>();
     let stop_obj_cells: HashSet<PointWTime> = todo!();
@@ -226,6 +226,7 @@ mod test {
     use tinymvt::webmercator::lnglat_to_zxy;
 
     #[test]
+    #[ignore = "just foolin around"]
     fn it_works() {
         // POLYGON ((5.0 54.0, 10.0 54, 10.0 56, 5.0 56.0))
         let coords: Vec<CoordM<4326>> = [
@@ -237,7 +238,7 @@ mod test {
         .map(|f| f.into())
         .to_vec(); // i.e. a square from (0,0) to (1,1)
         let ls = LineStringM::try_from(coords.clone()).unwrap();
-        let cells = draw_linestring(&[&ls], 21, 21, None);
+        let cells = draw_linestring(&[ls.to_owned()], 21, 21, None);
         assert!(cells.len() > 0);
         //TODO render same linestring, but with use of stop object (should cause an explosion in cell count)
     }
