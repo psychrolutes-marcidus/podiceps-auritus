@@ -188,10 +188,7 @@ fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync
     ls: &LineStringM<4326>,
     zoom: i32,
     conf: DbScanConf<Dist, 4326>,
-) -> f64 {
-    // let ls_count = draw_linestring(ls, zoom, zoom).len();
-    // let stop_obj_count = todo!();
-
+) -> f64 {  
     let ls_cells = draw_linestring(&[ls.to_owned()], zoom, zoom, None)
         .into_iter()
         .collect::<HashSet<PointWTime>>();
@@ -271,12 +268,10 @@ mod test {
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::CellTaxicab)
             .zoom(19)
-            // .rendering_model(RenderingModel::Linestring)
             .build();
 
         assert_eq!(conf.sampling, None);
         let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
-        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
@@ -295,12 +290,10 @@ mod test {
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            // .rendering_model(RenderingModel::Linestring)
             .build();
 
         assert_eq!(conf.sampling, None);
         let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
-        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
@@ -319,17 +312,10 @@ mod test {
         let ls_conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            // .rendering_model(RenderingModel::Linestring)
             .build();
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            // .rendering_model(RenderingModel::TwoDimensional {
-            //     a: 10,
-            //     b: 10,
-            //     c: 10,
-            //     d: 10,
-            // })
             .build();
 
         assert_eq!(conf.sampling, None);
@@ -367,18 +353,15 @@ mod test {
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
             .sampling(21)
-            // .rendering_model(RenderingModel::Linestring)
             .build();
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
-            // .rendering_model(RenderingModel::Linestring)
             .build();
 
         assert_eq!(conf.sampling, None);
         let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
         let ss_e = ss_conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
-        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
@@ -416,11 +399,6 @@ mod test {
         let wkb = read_wkb(&bytea).unwrap();
         let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
 
-        // let ss_conf = ErrorMeasurementConf::builder()
-        //     .method(ErrorMeasurementMethod::Geodesic)
-        //     .zoom(19)
-        //     .sampling(21)
-        //     .build();
         let conf = ErrorMeasurementConf::builder()
             .method(ErrorMeasurementMethod::Geodesic)
             .zoom(19)
