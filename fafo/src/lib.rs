@@ -8,6 +8,7 @@ use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, PointWTime, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
 
+pub type CellWithError = (GPoint,f64);
 #[derive(Debug, Clone, Copy, TypedBuilder)]
 pub struct ErrorMeasurementConf {
     method: ErrorMeasurementMethod,
@@ -39,7 +40,7 @@ impl ErrorMeasurementConf {
         self,
         ls: &LineStringM<4326>,
         rendering_model: RenderingModel,
-    ) -> Vec<(GPoint, f64)> {
+    ) -> Vec<CellWithError> {
         self.calculate_error(
             ls,
             &self
@@ -55,7 +56,7 @@ impl ErrorMeasurementConf {
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
         cells: &[GPoint],
-    ) -> Vec<(GPoint, f64)> {
+    ) -> Vec<CellWithError> {
         let interpolated_cells = cells.iter().filter(|p| {
             **p == point_to_grid(f.coord.into(), self.zoom.into())
                 || **p == point_to_grid(s.coord.into(), self.zoom.into())
@@ -70,7 +71,7 @@ impl ErrorMeasurementConf {
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
         gp: &GPoint,
-    ) -> (GPoint, f64) {
+    ) -> CellWithError {
         match self.method {
             ErrorMeasurementMethod::CellTaxicab => {
                 let (fc, sc) = (
@@ -99,7 +100,7 @@ impl ErrorMeasurementConf {
         &self,
         gt_ls: &LineStringM<4326>,
         cells: &HashSet<GPoint>,
-    ) -> Vec<(GPoint, f64)> {
+    ) -> Vec<CellWithError> {
         let ground_truth_cells = self.ground_truth_cells(&gt_ls);
         debug_assert!(
             ground_truth_cells.intersection(cells).count() == 0,
