@@ -1,9 +1,7 @@
-use std::cmp::min;
 use std::collections::HashSet;
 use std::f64;
 
 use geo::{Coord, Distance, GeoNum, Geodesic, Point};
-use linesonmaps::algo::stop_cluster::DbScanConf;
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, PointWTime, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
@@ -51,7 +49,7 @@ impl ErrorMeasurementConf {
         )
     }
 
-    //TODO: this will not necesarilly give the same result at `measure_error`, since it only has two points-worth of context (in opposed to a linestring)
+    //TODO: this will not necesarilly give the same result at `measure_error_entire_linestring`, since it only has two points-worth of context (in opposed to a linestring)
     pub fn cell_distance_to_ground_truth<Cells: Iterator<Item = GPoint>>(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
@@ -197,9 +195,8 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
 mod test {
     use geo::{Coord, Point};
     use hex;
-    use linesonmaps::types::coordm::CoordM;
     use linesonmaps::types::linestringm::LineStringM;
-    use tilerizer::{Point as GPoint, PointWTime, draw_linestring};
+    use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
     use crate::*;
