@@ -43,6 +43,14 @@ impl<const CRS: u64> TryFrom<Vec<CoordM<CRS>>> for LineStringM<CRS> {
     }
 }
 
+impl<const CRS: u64> TryFrom<LineM<CRS>> for LineStringM<CRS> {
+    type Error = super::error::Error;
+
+    fn try_from(LineM { from, to }: LineM<CRS>) -> Result<Self, Self::Error> {
+        LineStringM::new(vec![from.coord, to.coord]).ok_or(Error::Timestamp)
+    }
+}
+
 impl<const CRS: u64> TryFrom<wkb::reader::Wkb<'_>> for LineStringM<CRS> {
     type Error = super::error::Error;
 
