@@ -8,7 +8,7 @@ use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, PointWTime, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
 
-pub type CellWithError = (GPoint,f64);
+pub type CellWithError = (GPoint, f64);
 #[derive(Debug, Clone, Copy, TypedBuilder)]
 pub struct ErrorMeasurementConf {
     method: ErrorMeasurementMethod,
@@ -18,14 +18,14 @@ pub struct ErrorMeasurementConf {
     sampling: Option<u8>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorMeasurementMethod {
     /// Measures geodesic distance from cell centroid to nearest ground truth point.
     Geodesic,
     /// measures distance in terms of horizontal cell distance + vertical cell distance (i.e. an adjacent cell would have distance 1, while a diagonally adjacent cell would have distance 2)
     CellTaxicab,
 }
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderingModel {
     /// Model ship movement as a linestring
     Linestring,
@@ -52,18 +52,34 @@ impl ErrorMeasurementConf {
     }
 
     //TODO: this will not necesarilly give the same result at `measure_error`, since it only has two points-worth of context (in opposed to a linestring)
-    pub fn cell_distance_to_ground_truth(
+    pub fn cell_distance_to_ground_truth<Cells: Iterator<Item = GPoint>>(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
-        cells: &[GPoint],
+        cells: Cells,
     ) -> Vec<CellWithError> {
-        let interpolated_cells = cells.iter().filter(|p| {
-            **p == point_to_grid(f.coord.into(), self.zoom.into())
-                || **p == point_to_grid(s.coord.into(), self.zoom.into())
+        let interpolated_cells = cells.filter(|p| {
+            *p == point_to_grid(f.coord.into(), self.zoom.into())
+                || *p == point_to_grid(s.coord.into(), self.zoom.into())
         });
 
         interpolated_cells
-            .map(|ic| self.cell_to_nearest_ground_truth((f, s), ic))
+            .map(|ic| self.cell_to_nearest_ground_truth((f, s), &ic))
+            .collect()
+    }
+
+    /// Should be called on the portion of a trajectory corresponding to a stop object
+    pub fn stop_object_cell_to_ground_truth<Cells: Iterator<Item = GPoint>>(
+        &self,
+        ground_truth: &[PointM<4326>],
+        stop_object_cells: Cells,
+    ) -> Vec<CellWithError> {
+        stop_object_cells
+            .map(|c| {
+                (
+                    c,
+                    self.cell_to_nearest_point(ground_truth.iter().copied(), &c),
+                )
+            })
             .collect()
     }
 
@@ -108,24 +124,41 @@ impl ErrorMeasurementConf {
         );
         cells
             .iter()
-            .map(|c| (*c, self.cell_to_nearest_point(gt_ls, c)))
+            .map(|c| (*c, self.cell_to_nearest_point(gt_ls.points(), c)))
             .collect()
     }
-    fn cell_to_nearest_point(&self, gt: &LineStringM<4326>, gp: &GPoint) -> f64 {
+    fn cell_to_nearest_point<P: Iterator<Item = PointM<4326>>>(&self, gt: P, gp: &GPoint) -> f64 {
         match self.method {
             ErrorMeasurementMethod::CellTaxicab => gt
-                .points()
+                // .points()
+                // .iter()
                 .map(|p| point_to_grid(p.coord.into(), self.zoom.into()))
                 .map(|c| (c.x - gp.x).abs() + (c.y - gp.y).abs())
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                .points()
+                // .points()
+                // .iter()
                 .map(|p| ground_truth_to_cell_geodesic(p, &gp, self.zoom))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
     }
+    // fn cell_to_nearest_point(&self, gt: &LineStringM<4326>, gp: &GPoint) -> f64 {
+    //     match self.method {
+    //         ErrorMeasurementMethod::CellTaxicab => gt
+    //             .points()
+    //             .map(|p| point_to_grid(p.coord.into(), self.zoom.into()))
+    //             .map(|c| (c.x - gp.x).abs() + (c.y - gp.y).abs())
+    //             .min_by(|x, y| x.total_cmp(y))
+    //             .unwrap_or(0) as f64,
+    //         ErrorMeasurementMethod::Geodesic => gt
+    //             .points()
+    //             .map(|p| ground_truth_to_cell_geodesic(p, &gp, self.zoom))
+    //             .min_by(|x, y| x.total_cmp(y))
+    //             .unwrap_or(0.0),
+    //     }
+    // }
     fn generate_cells(
         &self,
         gt_ls: &LineStringM<4326>,
@@ -185,11 +218,12 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
 //TODO: not really tested
 /// error function by #cells generated via linestring with #cells generated via stop object
 #[allow(unused_variables)]
+#[deprecated= "use stop_object_cell_to_ground_truth instead"]
 fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
     ls: &LineStringM<4326>,
     zoom: i32,
     conf: DbScanConf<Dist, 4326>,
-) -> f64 {  
+) -> f64 {
     let ls_cells = draw_linestring(&[ls.to_owned()], zoom, zoom, None)
         .into_iter()
         .collect::<HashSet<PointWTime>>();
@@ -201,6 +235,7 @@ fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync
 
 //TODO resume development on error measurement for stop-objects
 #[allow(unused_variables)]
+#[deprecated= "use stop_object_cell_to_ground_truth instead"]
 fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
     ls: &LineStringM<4326>,
     zoom: i32,
@@ -232,7 +267,6 @@ mod test {
     use geo::{Coord, Point};
     use hex;
     use linesonmaps::types::coordm::CoordM;
-    use linesonmaps::types::linem::LineM;
     use linesonmaps::types::linestringm::LineStringM;
     use tilerizer::{Point as GPoint, PointWTime, draw_linestring};
     use wkb::reader::read_wkb;
@@ -423,7 +457,8 @@ mod test {
                 )
             });
 
-        let mut errors = lines_to_cells.map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, &cs));
+        let mut errors = lines_to_cells
+            .map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, cs.into_iter()));
 
         assert!(
             errors.all(|v| v.iter().all(|(_, e)| *e > 0.0)),
