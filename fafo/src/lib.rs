@@ -35,7 +35,7 @@ pub enum RenderingModel {
 impl ErrorMeasurementConf {
     //TODO maybe there should be a function here for aggregating errors across multiple trajectories, but i do not know if it needs any more parameters
     /// Assigns error value to every rendered non ground-truth cell
-    pub fn measure_error(
+    pub fn measure_error_entire_linestring(
         self,
         ls: &LineStringM<4326>,
         rendering_model: RenderingModel,
@@ -51,7 +51,7 @@ impl ErrorMeasurementConf {
     }
 
     //TODO: this will not necesarilly give the same result at `measure_error`, since it only has two points-worth of context (in opposed to a linestring)
-    pub fn error_to_ground_truth(
+    pub fn cell_distance_to_ground_truth(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
         cells: &[GPoint],
@@ -181,8 +181,6 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
     Geodesic.distance(grid_centroid_to_lng_lat(*gp, zoom), p.into())
 }
 
-
-
 //TODO: not really tested
 /// error function by #cells generated via linestring with #cells generated via stop object
 #[allow(unused_variables)]
@@ -236,8 +234,9 @@ mod test {
     use geo::{Coord, Point};
     use hex;
     use linesonmaps::types::coordm::CoordM;
+    use linesonmaps::types::linem::LineM;
     use linesonmaps::types::linestringm::LineStringM;
-    use tilerizer::{Point as GPoint, draw_linestring};
+    use tilerizer::{Point as GPoint, PointWTime, draw_linestring};
     use wkb::reader::read_wkb;
 
     use crate::*;
@@ -276,7 +275,7 @@ mod test {
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm, RenderingModel::Linestring);
+        let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -300,7 +299,7 @@ mod test {
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm, RenderingModel::Linestring);
+        let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -334,7 +333,7 @@ mod test {
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(
+        let e = conf.measure_error_entire_linestring(
             &lsm,
             RenderingModel::TwoDimensional {
                 a: 10,
@@ -343,7 +342,7 @@ mod test {
                 d: 10,
             },
         );
-        let ls_e = ls_conf.measure_error(&lsm, RenderingModel::Linestring);
+        let ls_e = ls_conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -377,8 +376,8 @@ mod test {
             .build();
 
         assert_eq!(conf.sampling, None);
-        let e = conf.measure_error(&lsm, RenderingModel::Linestring);
-        let ss_e = ss_conf.measure_error(&lsm, RenderingModel::Linestring);
+        let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
+        let ss_e = ss_conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
         // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
@@ -407,5 +406,49 @@ mod test {
         // assert!(false);
         assert!((x - rx).abs() < 1.0E-4, ":((( {0}", (x - rx).abs());
         assert!((y - ry).abs() < 1.0E-4, ":((( {0}", (y - ry).abs());
+    }
+
+    #[test]
+    fn cell_error_from_single_line() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+
+        // let ss_conf = ErrorMeasurementConf::builder()
+        //     .method(ErrorMeasurementMethod::Geodesic)
+        //     .zoom(19)
+        //     .sampling(21)
+        //     .build();
+        let conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::Geodesic)
+            .zoom(19)
+            .build();
+
+        let lines_to_cells = lsm
+            .lines()
+            .map(|l| LineStringM::try_from(l).unwrap())
+            .map(|ls| {
+                (
+                    (PointM::from(ls.0[0]), PointM::from(ls.0[1])),
+                    draw_linestring(
+                        &[ls.clone()],
+                        conf.zoom.into(),
+                        conf.sampling.unwrap_or(conf.zoom).into(),
+                        None,
+                    )
+                    .iter()
+                    .map(|gpwt| gpwt.point)
+                    .collect::<Vec<_>>(),
+                )
+            });
+
+        let mut errors = lines_to_cells.map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, &cs));
+
+        assert!(
+            errors.all(|v| v.iter().all(|(_, e)| *e > 0.0)),
+            "Every non ground-truth cell should have at least some error"
+        );
     }
 }
