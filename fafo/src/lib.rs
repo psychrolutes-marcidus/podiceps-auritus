@@ -109,8 +109,6 @@ impl ErrorMeasurementConf {
                 (*gp, min)
             }
         }
-
-        // todo!()
     }
     fn calculate_error(
         &self,
@@ -130,35 +128,16 @@ impl ErrorMeasurementConf {
     fn cell_to_nearest_point<P: Iterator<Item = PointM<4326>>>(&self, gt: P, gp: &GPoint) -> f64 {
         match self.method {
             ErrorMeasurementMethod::CellTaxicab => gt
-                // .points()
-                // .iter()
                 .map(|p| point_to_grid(p.coord.into(), self.zoom.into()))
                 .map(|c| (c.x - gp.x).abs() + (c.y - gp.y).abs())
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                // .points()
-                // .iter()
                 .map(|p| ground_truth_to_cell_geodesic(p, &gp, self.zoom))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
     }
-    // fn cell_to_nearest_point(&self, gt: &LineStringM<4326>, gp: &GPoint) -> f64 {
-    //     match self.method {
-    //         ErrorMeasurementMethod::CellTaxicab => gt
-    //             .points()
-    //             .map(|p| point_to_grid(p.coord.into(), self.zoom.into()))
-    //             .map(|c| (c.x - gp.x).abs() + (c.y - gp.y).abs())
-    //             .min_by(|x, y| x.total_cmp(y))
-    //             .unwrap_or(0) as f64,
-    //         ErrorMeasurementMethod::Geodesic => gt
-    //             .points()
-    //             .map(|p| ground_truth_to_cell_geodesic(p, &gp, self.zoom))
-    //             .min_by(|x, y| x.total_cmp(y))
-    //             .unwrap_or(0.0),
-    //     }
-    // }
     fn generate_cells(
         &self,
         gt_ls: &LineStringM<4326>,
@@ -200,7 +179,6 @@ impl ErrorMeasurementConf {
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
-    //TODO: this might map to the northwesternmost point in a grid cell, correct behavior should be centroid
     // seems to be close enough
     let lon = ((0.5 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
     let lat = (f64::consts::PI
@@ -215,53 +193,6 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
     Geodesic.distance(grid_centroid_to_lng_lat(*gp, zoom), p.into())
 }
 
-//TODO: not really tested
-/// error function by #cells generated via linestring with #cells generated via stop object
-#[allow(unused_variables)]
-#[deprecated= "use stop_object_cell_to_ground_truth instead"]
-fn stop_object_error<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
-    ls: &LineStringM<4326>,
-    zoom: i32,
-    conf: DbScanConf<Dist, 4326>,
-) -> f64 {
-    let ls_cells = draw_linestring(&[ls.to_owned()], zoom, zoom, None)
-        .into_iter()
-        .collect::<HashSet<PointWTime>>();
-    let stop_obj_cells: HashSet<PointWTime> = todo!();
-    let diff = stop_obj_cells.difference(&ls_cells).count(); // man kan evt. måle afstand fra celle til nærmeste celle i `ls_cells` og bruge det som en fejlmetrik? på den måde
-    diff as f64
-    // stop_obj_count as f64 / ls_count as f64 //? evt sse,rmse hvis vi måler fejl over et helt datasæt
-}
-
-//TODO resume development on error measurement for stop-objects
-#[allow(unused_variables)]
-#[deprecated= "use stop_object_cell_to_ground_truth instead"]
-fn stop_object_error_cell_dist<Dist: Fn(&PointM<4326>, &PointM<4326>) -> f64 + Send + Sync>(
-    ls: &LineStringM<4326>,
-    zoom: i32,
-    conf: DbScanConf<Dist, 4326>,
-) -> f64 {
-    let ls_cells = draw_linestring(&[ls.to_owned()], zoom, zoom, None)
-        .into_iter()
-        .collect::<HashSet<PointWTime>>();
-    let stop_obj_cells: HashSet<PointWTime> = todo!();
-    let diff = stop_obj_cells.difference(&ls_cells);
-    let distances: f64 = diff
-        .map(|c| {
-            ls_cells
-                .iter()
-                .map(|lsc| {
-                    let d = lsc.point - c.point;
-                    let dist = ((d.x.pow(2) + d.y.pow(2)) as f64).sqrt();
-                    dist
-                })
-                .min_by(|x, y| x.total_cmp(y))
-                .unwrap_or(f64::INFINITY)
-        })
-        .sum();
-    distances
-}
-
 #[cfg(test)]
 mod test {
     use geo::{Coord, Point};
@@ -273,24 +204,6 @@ mod test {
 
     use crate::*;
     use tinymvt::webmercator::lnglat_to_zxy;
-
-    #[test]
-    #[ignore = "just foolin around"]
-    fn it_works() {
-        // POLYGON ((5.0 54.0, 10.0 54, 10.0 56, 5.0 56.0))
-        let coords: Vec<CoordM<4326>> = [
-            (5.0, 54.0, 0.0),
-            (10.0, 54.0, 1.0),
-            (10.0, 56.0, 2.0),
-            (5.0, 56.0, 3.0),
-        ]
-        .map(|f| f.into())
-        .to_vec(); // i.e. a square from (0,0) to (1,1)
-        let ls = LineStringM::try_from(coords.clone()).unwrap();
-        let cells = draw_linestring(&[ls.to_owned()], 21, 21, None);
-        assert!(cells.len() > 0);
-        //TODO render same linestring, but with use of stop object (should cause an explosion in cell count)
-    }
 
     #[test]
     fn cell_error() {
@@ -457,8 +370,8 @@ mod test {
                 )
             });
 
-        let mut errors = lines_to_cells
-            .map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, cs.into_iter()));
+        let mut errors =
+            lines_to_cells.map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, cs.into_iter()));
 
         assert!(
             errors.all(|v| v.iter().all(|(_, e)| *e > 0.0)),
