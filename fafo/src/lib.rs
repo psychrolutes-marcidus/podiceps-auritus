@@ -181,44 +181,7 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
     Geodesic.distance(grid_centroid_to_lng_lat(*gp, zoom), p.into())
 }
 
-/// Measures sum of error for cells, at the given zoom level, that do not contain any ground-truth point. Points in the linestring are considered ground-truth point
-#[deprecated = "use `ErrorMeasurementConf` instead"]
-fn line_error_from_ground_truth(
-    ls: &LineStringM<4326>,
-    zoom: i32,
-    sampling_zoom: i32,
-) -> Vec<(GPoint, i32)> {
-    let ground_truth = ls.points();
-    let ground_truth_cells = ground_truth
-        .map(|p| point_to_grid(p.coord.into(), zoom))
-        .collect::<Vec<_>>();
-    let cells = draw_linestring(&[ls.to_owned()], zoom, sampling_zoom, None)
-        .into_iter()
-        .map(|pw| pw.point)
-        .collect::<HashSet<GPoint>>();
 
-    let ground_truth_hashset = HashSet::from_iter(ground_truth_cells);
-    let cells = cells
-        .difference(&ground_truth_hashset)
-        .cloned()
-        .collect::<Vec<_>>();
-
-    //for each non ground-truth cell, find taxicab distance to nearest ground-truth cell
-    let cell_errors = cells
-        .iter()
-        .map(|cp| {
-            (
-                *cp,
-                ground_truth_hashset
-                    .iter()
-                    .map(|gp| (gp.x - cp.x).abs() + (gp.y - cp.y).abs())
-                    .min()
-                    .unwrap_or(0),
-            )
-        })
-        .collect::<Vec<_>>();
-    cell_errors
-}
 
 //TODO: not really tested
 /// error function by #cells generated via linestring with #cells generated via stop object
