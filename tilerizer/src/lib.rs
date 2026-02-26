@@ -131,6 +131,7 @@ pub fn draw_linestring(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_2d_vessel(
     ls: &[LineStringM<4326>],
     a: i16,

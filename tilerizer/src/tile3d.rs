@@ -46,7 +46,7 @@ pub fn render_stop_object(
             .map(|p| (p.point.x, p.point.y, p.z))
             .collect()
     });
-    
+
     points.map(|x| {
         let mut x = x;
         x.sort_by_cached_key(|x| *x);
@@ -113,6 +113,7 @@ pub fn draw_triangle(triangle: geo_types::Triangle, sample_zoom_level: i32) -> V
     points
 }
 
+#[allow(clippy::too_many_arguments)]
 fn naive_point_in_triangle(
     v1x: i32,
     v1y: i32,
@@ -143,6 +144,7 @@ fn distance_square_point_to_segment(x1: f64, y1: f64, x2: f64, y2: f64, x: f64, 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_point(
     v1x: i32,
     v1y: i32,
@@ -169,25 +171,13 @@ fn check_point(
     let y = y as f64;
 
     if distance_square_point_to_segment(x1, y1, x2, y2, x, y) <= EPS_SQUARE {
-        return Some((
-            alpha.clamp(0.,1.),
-            beta.clamp(0.,1.),
-            gamma.clamp(0.,1.),
-        ));
+        return Some((alpha.clamp(0., 1.), beta.clamp(0., 1.), gamma.clamp(0., 1.)));
     }
     if distance_square_point_to_segment(x2, y2, x3, y3, x, y) <= EPS_SQUARE {
-        return Some((
-            alpha.clamp(0.,1.),
-            beta.clamp(0.,1.),
-            gamma.clamp(0.,1.),
-        ));
+        return Some((alpha.clamp(0., 1.), beta.clamp(0., 1.), gamma.clamp(0., 1.)));
     }
     if distance_square_point_to_segment(x3, y3, x1, y1, x, y) <= EPS_SQUARE {
-        return Some((
-            alpha.clamp(0.,1.),
-            beta.clamp(0.,1.),
-            gamma.clamp(0.,1.),
-        ));
+        return Some((alpha.clamp(0., 1.), beta.clamp(0., 1.), gamma.clamp(0., 1.)));
     }
 
     None
