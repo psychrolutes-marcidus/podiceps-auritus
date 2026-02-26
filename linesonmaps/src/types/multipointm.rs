@@ -4,7 +4,7 @@ use crate::types::linestringm::LineStringM;
 use crate::types::pointm::PointM;
 use geo_traits::{PointTrait, UnimplementedMultiLineString};
 use geo_traits::{
-    CoordTrait, GeometryTrait, LineStringTrait, MultiPointTrait,
+    CoordTrait, GeometryTrait, MultiPointTrait,
     UnimplementedGeometryCollection, UnimplementedLine,
     UnimplementedMultiPolygon, UnimplementedPolygon, UnimplementedRect, UnimplementedTriangle,
 };

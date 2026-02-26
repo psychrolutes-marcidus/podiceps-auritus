@@ -170,23 +170,23 @@ fn check_point(
 
     if distance_square_point_to_segment(x1, y1, x2, y2, x, y) <= EPS_SQUARE {
         return Some((
-            alpha.min(1.).max(0.),
-            beta.min(1.).max(0.),
-            gamma.min(1.).max(0.),
+            alpha.clamp(0.,1.),
+            beta.clamp(0.,1.),
+            gamma.clamp(0.,1.),
         ));
     }
     if distance_square_point_to_segment(x2, y2, x3, y3, x, y) <= EPS_SQUARE {
         return Some((
-            alpha.min(1.).max(0.),
-            beta.min(1.).max(0.),
-            gamma.min(1.).max(0.),
+            alpha.clamp(0.,1.),
+            beta.clamp(0.,1.),
+            gamma.clamp(0.,1.),
         ));
     }
     if distance_square_point_to_segment(x3, y3, x1, y1, x, y) <= EPS_SQUARE {
         return Some((
-            alpha.min(1.).max(0.),
-            beta.min(1.).max(0.),
-            gamma.min(1.).max(0.),
+            alpha.clamp(0.,1.),
+            beta.clamp(0.,1.),
+            gamma.clamp(0.,1.),
         ));
     }
 

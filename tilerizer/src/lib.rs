@@ -29,18 +29,12 @@ impl Zoom for PointWZ {
         let x;
         let y;
 
-        if change > 0 {
-            x = self.point.x / 2_i32.pow(change.unsigned_abs());
-            y = self.point.y / 2_i32.pow(change.unsigned_abs());
-        } else {
-            x = self.point.x / 2_i32.pow(change.unsigned_abs());
-            y = self.point.y / 2_i32.pow(change.unsigned_abs());
-        }
+        x = self.point.x / 2_i32.pow(change.unsigned_abs());
+        y = self.point.y / 2_i32.pow(change.unsigned_abs());
 
         Self {
             point: Point { x, y },
             z: zoom_level,
-            ..self
         }
     }
 }
@@ -103,7 +97,8 @@ pub fn draw_linestring(
                 .map(|p| {
                     (
                         point_to_grid((p.coord.x, p.coord.y).into(), sampling_zoom_level),
-                        DateTime::from_timestamp_secs(p.coord.m as i64).unwrap(),
+                        DateTime::from_timestamp_secs(p.coord.m as i64)
+                            .expect("timestamp should be well within range "),
                     )
                 })
                 .tuple_windows()
@@ -254,8 +249,6 @@ pub fn point_time_duration(
     point_count: i32,
 ) -> chrono::TimeDelta {
     let dt = time_to.signed_duration_since(time_from);
-
-    
 
     dt.checked_div(point_count).unwrap_or(dt)
 }
