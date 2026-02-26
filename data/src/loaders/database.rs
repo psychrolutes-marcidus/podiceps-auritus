@@ -67,6 +67,7 @@ impl DbConn {
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub fn insert_sub_traj_inteval(
     conn: &mut Client,
     split_intervals: Vec<(i32, Vec<(DateTime<Utc>, TimeDelta)>)>,
@@ -137,6 +138,7 @@ pub fn insert_sub_traj_inteval(
     Ok(t)
 }
 
+#[allow(unused)]
 fn insert_split_traj<const CRS: u64>(
     conn: &mut Client,
     sub_trajs: Vec<(i32, TrajectorySplit<CRS>, f64, TimeDelta)>,
