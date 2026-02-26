@@ -28,7 +28,7 @@ pub enum RenderingModel {
     /// Model ship movement as a linestring
     Linestring,
     /// Model ship movement as a moving polygon (i.e. linestring with width)
-    TwoDimensional { a: u16, b: u16, c: u16, d: u16 }, // TODO this is bad since a single ErrorMeasurementConf no longer works across vessels with different dimensions
+    TwoDimensional { a: u16, b: u16, c: u16, d: u16 },
 }
 
 impl ErrorMeasurementConf {
@@ -49,7 +49,7 @@ impl ErrorMeasurementConf {
         )
     }
 
-    //TODO: this will not necesarilly give the same result at `measure_error_entire_linestring`, since it only has two points-worth of context (in opposed to a linestring)
+    //TODO: this will not necessarily give the same result at [`ErrorMeasurementConf::measure_error_entire_linestring`], since it only has two points-worth of context (in opposed to a linestring)
     pub fn cell_distance_to_ground_truth<Cells: Iterator<Item = GPoint>>(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
@@ -175,16 +175,6 @@ impl ErrorMeasurementConf {
     }
 }
 
-// fn merge_cells(cells: &[Vec<CellWithError>]) -> Vec<CellWithError> {
-//     let mut map = HashMap::<GPoint, f64>::with_capacity(cells.len());
-
-//     cells.iter().flatten().copied().for_each(|(p, e)| {
-//         map.entry(p).and_modify(|v| *v = v.min(e)).or_insert(e);
-//     });
-
-//     map.into_iter().collect()
-// }
-
 /// deduplicates a nested list of cells (with their corresponding errors) by picking the minimum error value.
 /// Useful after rendering and scoring all cells in a trajectory with [`ErrorMeasurementConf::cell_distance_to_ground_truth`] since it may yield multiple instances of the same cell
 pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<CellWithError> {
@@ -196,12 +186,11 @@ pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<C
     });
 
     map.into_iter().collect()
-    // todo!()
 }
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
-    // seems to be close enough
+    // seems to be close enough (not perfectly consistent with PostGIS)
     let lon = ((0.5 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
     let lat = (f64::consts::PI
         - ((0.5 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
@@ -219,7 +208,6 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
 mod test {
     use geo::{Coord, Point};
     use hex;
-    use linesonmaps::algo::stop_cluster::{self, *};
     use linesonmaps::types::linestringm::LineStringM;
     use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
@@ -246,8 +234,6 @@ mod test {
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
         );
-        // dbg!(&e);
-        // assert!(false)
     }
     #[test]
     fn cell_error_euclidean_typed_builder() {
@@ -299,7 +285,6 @@ mod test {
             },
         );
         let ls_e = ls_conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
-        // let e = line_error_from_ground_truth_geodesic(&lsm, 19, 19);
         assert!(
             e.iter().all(|(_, d)| *d > 0.0),
             "no error value can be 0 since it only reports for non-ground truth cells"
@@ -308,8 +293,6 @@ mod test {
             ls_e.len() < e.len(),
             "2d renderer should render at least as many points"
         );
-        // dbg!(&e);
-        // assert!(false)
     }
     #[test]
     fn cell_error_euclidean_super_sampling_typed_builder() {
@@ -354,9 +337,6 @@ mod test {
             },
             grid.0,
         );
-        // dbg!(&grid);
-        // dbg!(ry);
-        // assert!(false);
         assert!((x - rx).abs() < 1.0E-4, ":((( {0}", (x - rx).abs());
         assert!((y - ry).abs() < 1.0E-4, ":((( {0}", (y - ry).abs());
     }
@@ -419,45 +399,4 @@ mod test {
             vec![(GPoint { x: 1, y: 1 }, 2.0), (GPoint { x: 2, y: 2 }, 7.0)]
         )
     }
-    // #[test]
-    // fn stop_object_measure_error() {
-    //     const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
-
-    //     let bytea = hex::decode(HEXSTRING).unwrap();
-    //     let wkb = read_wkb(&bytea).unwrap();
-    //     let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
-
-    //     let conf = ErrorMeasurementConf::builder()
-    //         .method(ErrorMeasurementMethod::Geodesic)
-    //         .zoom(19)
-    //         .build();
-
-    //     let stop_cluster::
-
-    //     let lines_to_cells = lsm
-    //         .lines()
-    //         .map(|l| LineStringM::try_from(l).unwrap())
-    //         .map(|ls| {
-    //             (
-    //                 (PointM::from(ls.0[0]), PointM::from(ls.0[1])),
-    //                 draw_linestring(
-    //                     &[ls.clone()],
-    //                     conf.zoom.into(),
-    //                     conf.sampling.unwrap_or(conf.zoom).into(),
-    //                     None,
-    //                 )
-    //                 .iter()
-    //                 .map(|gpwt| gpwt.point)
-    //                 .collect::<Vec<_>>(),
-    //             )
-    //         });
-
-    //     let mut errors =
-    //         lines_to_cells.map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, cs.into_iter()));
-
-    //     assert!(
-    //         errors.all(|v| v.iter().all(|(_, e)| *e > 0.0)),
-    //         "Every non ground-truth cell should have at least some error"
-    //     );
-    // }
 }
