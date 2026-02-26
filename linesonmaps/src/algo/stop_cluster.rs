@@ -18,15 +18,6 @@ pub enum Classification {
     Unclassified,
 }
 
-impl Classification {
-    fn cluster(&self) -> Option<usize> {
-        match self {
-            &Classification::Core(c) | &Classification::Edge(c) => Some(c),
-            _ => None,
-        }
-    }
-}
-
 #[derive(TypedBuilder, Debug)]
 pub struct DbScanConf<Dist, const CRS: u64>
 where
