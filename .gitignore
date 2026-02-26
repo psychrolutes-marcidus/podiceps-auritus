@@ -94,3 +94,5 @@ segment_experiment/*.txt
 
 *.pq
 *.db
+
+ferruginous/configure

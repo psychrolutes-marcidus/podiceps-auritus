@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "tileheater", "confidence_stats"]
+members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "tileheater", "confidence_stats", "ferruginous"]
 
 [profile.release]
 lto = true
@@ -34,5 +34,5 @@ pgrx = "=0.16.1"
 tilerizer = { path = "tilerizer" }
 serde = "1.0.228"
 rayon = "1.11.0"
-duckdb = { version = "1.4.4", features = ["bundled"]}
+duckdb = { version = "1.4.4", features = ["bundled", "modern-full"]}
 rust_decimal = "1.40.0"
