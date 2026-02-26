@@ -70,7 +70,7 @@ impl DbConn {
 pub fn insert_sub_traj_inteval(
     conn: &mut Client,
     split_intervals: Vec<(i32, Vec<(DateTime<Utc>, TimeDelta)>)>,
-) -> Result<Transaction, DatabaseError> {
+) -> Result<Transaction<'_>, DatabaseError> {
     let temp_table = "create temp table temp_split_interval
     (
         mmsi integer,
@@ -98,7 +98,7 @@ pub fn insert_sub_traj_inteval(
             msg: "COPY IN".into(),
         })?;
 
-    let num_splits = split_intervals.len();
+    let _num_splits = split_intervals.len();
     let in_str = split_intervals
         .into_iter()
         .map(|g| {
@@ -116,7 +116,7 @@ pub fn insert_sub_traj_inteval(
         .join("");
 
     writer.write_all(&in_str.into_bytes())?;
-    let count = writer.finish().expect("tokio_postgres be trolling");
+    let _count = writer.finish().expect("tokio_postgres be trolling");
     // debug_assert_eq!(
     //     count as usize, num_splits,
     //     "#copied rows should equal to #input rows"
@@ -126,7 +126,7 @@ pub fn insert_sub_traj_inteval(
         select mmsi, to_timestamp(t_start) as t_start, make_interval(secs => t_end) as t_end from temp_split_interval
             on conflict do nothing;";
 
-    let b = t
+    let _b = t
         .execute(insert, &[])
         .map_err(|e| DatabaseError::QueryError {
             db_error: e,
@@ -573,7 +573,7 @@ impl<const CHUNK_SIZE: u32> Iterator for TrajectoryIter<CHUNK_SIZE> {
                 msg: "trajectories query".into(),
             });
         let o_result = result
-            .map(|v| {
+            .and_then(|v| {
                 v.into_iter()
                     .map(|r| {
                         Ok::<(i32, LineStringM<4326>), DatabaseError>((
@@ -585,7 +585,6 @@ impl<const CHUNK_SIZE: u32> Iterator for TrajectoryIter<CHUNK_SIZE> {
                     })
                     .collect::<Result<Vec<_>, _>>()
             })
-            .flatten()
             .map(|v| {
                 let uz = v.into_iter().unzip::<i32, LineStringM, Vec<_>, Vec<_>>();
                 if !uz.0.is_empty() {
@@ -598,7 +597,7 @@ impl<const CHUNK_SIZE: u32> Iterator for TrajectoryIter<CHUNK_SIZE> {
                 }
             })
             .transpose();
-        self.offset = self.offset + CHUNK_SIZE;
+        self.offset += CHUNK_SIZE;
         o_result
     }
 }

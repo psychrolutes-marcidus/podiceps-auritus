@@ -2,7 +2,6 @@ use chrono::{DateTime, TimeDelta, Utc};
 use rayon::prelude::*;
 use wkb::writer::{WriteOptions, write_line_string, write_point};
 
-use crate::types::coordm::CoordM;
 use crate::types::linestringm::LineStringM;
 use crate::types::pointm::PointM;
 
@@ -35,7 +34,7 @@ impl<const CRS: u64> TrajectorySplit<CRS> {
         let mut writer = Vec::<u8>::new();
         match self {
             Self::SubTrajectory(ls) => {
-                let _ = write_line_string(
+                write_line_string(
                     &mut writer,
                     ls,
                     &WriteOptions {
@@ -45,7 +44,7 @@ impl<const CRS: u64> TrajectorySplit<CRS> {
                 .expect("failed to write geometry");
             }
             Self::Point(p) => {
-                let _ = write_point(
+                write_point(
                     &mut writer,
                     p,
                     &WriteOptions {

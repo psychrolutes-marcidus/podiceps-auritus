@@ -4,7 +4,7 @@ use std::env::VarError;
 use std::net::AddrParseError;
 use std::num::ParseIntError;
 use thiserror::Error;
-use wkb::error::{self, WkbError};
+use wkb::error::WkbError;
 
 #[derive(Error, Debug)]
 pub enum DataError {

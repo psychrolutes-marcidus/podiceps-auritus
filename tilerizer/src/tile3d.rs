@@ -34,8 +34,7 @@ pub fn render_stop_object(
     let triangles = poly.constrained_triangulation(Default::default()).ok();
     let points: Option<Vec<_>> = triangles.map(|ts| {
         ts.iter()
-            .map(|t| draw_triangle(*t, sampling_zoom_level))
-            .flatten()
+            .flat_map(|t| draw_triangle(*t, sampling_zoom_level))
             .filter(|p| match filter_tile {
                 Some(ft) => {
                     let point = p.change_zoom(ft.2);
@@ -47,7 +46,8 @@ pub fn render_stop_object(
             .map(|p| (p.point.x, p.point.y, p.z))
             .collect()
     });
-    let points = points.map(|x| {
+    
+    points.map(|x| {
         let mut x = x;
         x.sort_by_cached_key(|x| *x);
         let points: Vec<_> = x
@@ -55,8 +55,7 @@ pub fn render_stop_object(
             .flat_map(|x| x.first().map(|x| x.to_owned()))
             .collect();
         points
-    });
-    points
+    })
 }
 
 pub fn draw_line_triangle(triangle: LineTriangle<4326>, sample_zoom_level: i32) -> Vec<PointWTime> {

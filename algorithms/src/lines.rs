@@ -10,6 +10,12 @@ pub struct SeperateConfBuilder {
     time: Option<Duration>,
 }
 
+impl Default for SeperateConfBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SeperateConfBuilder {
     pub fn new() -> SeperateConfBuilder {
         SeperateConfBuilder {
