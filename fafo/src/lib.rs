@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::f64;
 
 use geo::{Coord, Distance, GeoNum, Geodesic, Point};
@@ -175,6 +175,30 @@ impl ErrorMeasurementConf {
     }
 }
 
+// fn merge_cells(cells: &[Vec<CellWithError>]) -> Vec<CellWithError> {
+//     let mut map = HashMap::<GPoint, f64>::with_capacity(cells.len());
+
+//     cells.iter().flatten().copied().for_each(|(p, e)| {
+//         map.entry(p).and_modify(|v| *v = v.min(e)).or_insert(e);
+//     });
+
+//     map.into_iter().collect()
+// }
+
+/// deduplicates a nested list of cells (with their corresponding errors) by picking the minimum error value.
+/// Useful after rendering and scoring all cells in a trajectory with [`ErrorMeasurementConf::cell_distance_to_ground_truth`] since it may yield multiple instances of the same cell
+pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<CellWithError> {
+    let s = cells.size_hint();
+    let mut map = HashMap::<GPoint, f64>::with_capacity(s.1.unwrap_or(s.0));
+
+    cells.for_each(|(p, e)| {
+        map.entry(p).and_modify(|v| *v = v.min(e)).or_insert(e);
+    });
+
+    map.into_iter().collect()
+    // todo!()
+}
+
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
     // seems to be close enough
@@ -195,6 +219,7 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u
 mod test {
     use geo::{Coord, Point};
     use hex;
+    use linesonmaps::algo::stop_cluster::{self, *};
     use linesonmaps::types::linestringm::LineStringM;
     use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
@@ -375,4 +400,64 @@ mod test {
             "Every non ground-truth cell should have at least some error"
         );
     }
+    #[test]
+    fn merge_cells_works() {
+        let errors = vec![
+            vec![
+                (GPoint { x: 1, y: 1 }, 2.0),
+                (GPoint { x: 2, y: 2 }, (10.0)),
+            ],
+            vec![(GPoint { x: 1, y: 1 }, (5.0)), (GPoint { x: 2, y: 2 }, 7.0)],
+        ];
+
+        let mut m = merge_cells(errors.into_iter().flatten());
+
+        m.sort_by_key(|k| k.0.x);
+
+        assert_eq!(
+            m,
+            vec![(GPoint { x: 1, y: 1 }, 2.0), (GPoint { x: 2, y: 2 }, 7.0)]
+        )
+    }
+    // #[test]
+    // fn stop_object_measure_error() {
+    //     const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+    //     let bytea = hex::decode(HEXSTRING).unwrap();
+    //     let wkb = read_wkb(&bytea).unwrap();
+    //     let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+
+    //     let conf = ErrorMeasurementConf::builder()
+    //         .method(ErrorMeasurementMethod::Geodesic)
+    //         .zoom(19)
+    //         .build();
+
+    //     let stop_cluster::
+
+    //     let lines_to_cells = lsm
+    //         .lines()
+    //         .map(|l| LineStringM::try_from(l).unwrap())
+    //         .map(|ls| {
+    //             (
+    //                 (PointM::from(ls.0[0]), PointM::from(ls.0[1])),
+    //                 draw_linestring(
+    //                     &[ls.clone()],
+    //                     conf.zoom.into(),
+    //                     conf.sampling.unwrap_or(conf.zoom).into(),
+    //                     None,
+    //                 )
+    //                 .iter()
+    //                 .map(|gpwt| gpwt.point)
+    //                 .collect::<Vec<_>>(),
+    //             )
+    //         });
+
+    //     let mut errors =
+    //         lines_to_cells.map(|(ps, cs)| conf.cell_distance_to_ground_truth(ps, cs.into_iter()));
+
+    //     assert!(
+    //         errors.all(|v| v.iter().all(|(_, e)| *e > 0.0)),
+    //         "Every non ground-truth cell should have at least some error"
+    //     );
+    // }
 }
