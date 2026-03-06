@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::f64;
 
-use geo::{Coord, Distance, GeoNum, Geodesic, Point};
+use geo::{Coord, Distance, GeoNum, Geodesic, LineString, Point, Polygon};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, PointWTime, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
@@ -191,6 +191,7 @@ pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<C
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
     // seems to be close enough (not perfectly consistent with PostGIS)
+    //TODO: might be incorrect since the original formula finds the nort-westernmost point
     let lon = ((0.5 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
     let lat = (f64::consts::PI
         - ((0.5 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
@@ -198,6 +199,34 @@ pub fn grid_centroid_to_lng_lat(gp: GPoint, zoom: u8) -> Point<f64> {
         .atan()
         * (180_f64 / f64::consts::PI);
     Point(Coord { x: lon, y: lat })
+}
+fn point_to_polygon(gp: GPoint, zoom: u8) -> Polygon {
+    let lon = ((0.0 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
+    let lon_1 = ((1.0 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
+
+    let lat = (f64::consts::PI
+        - ((0.0 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
+        .sinh()
+        .atan()
+        * (180_f64 / f64::consts::PI);
+    let lat_1 = (f64::consts::PI
+        - ((1.0 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
+        .sinh()
+        .atan()
+        * (180_f64 / f64::consts::PI);
+
+    let ps = LineString::from(vec![
+        (lon, lat),
+        (lon_1, lat),
+        (lon_1, lat_1),
+        (lon, lat_1),
+        (lon, lat), /* remember to close the polygon */
+    ]); // TODO: ensure polygon is wound correctly
+
+    let poly = Polygon::new(ps, vec![]);
+    //TODO: ensure this polygon is atleast somewhat consistent with postGIS
+
+    poly
 }
 
 fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &GPoint, zoom: u8) -> f64 {
