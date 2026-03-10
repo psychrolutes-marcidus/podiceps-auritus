@@ -358,10 +358,12 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &Cell, _zoom: u8
 
 #[cfg(test)]
 mod test {
+    use std::cell;
+
     use geo::{BooleanOps, Coord, GeodesicArea, Point};
     use hex;
     use linesonmaps::types::linestringm::LineStringM;
-    use tilerizer::{Point as GPoint, draw_linestring};
+    use tilerizer::{Point as GPoint, draw_line, draw_linestring};
     use wkb::reader::read_wkb;
 
     use crate::*;
@@ -584,16 +586,6 @@ mod test {
         // dbg!(polygon);
         // assert!(false);
     }
-    // #[test]
-    // fn adas() {
-    //     let gp = GPoint { x: 20, y: 20 };
-    //     let c = Cell { coord: gp, z: 11 }; // quadkey = 0000003030
-
-    //     // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-    //     let polygon = point_to_polygon(c);
-    //     dbg!(polygon);
-    //     assert!(false);
-    // }
 
     #[test]
     fn point_to_polygon_sub_cell_contained() {
@@ -643,5 +635,43 @@ mod test {
         let a = mp.geodesic_area_unsigned();
         dbg!(a);
         assert!(a == 0_f64); // dunno if this is the case for every sub-cell
+    }
+    #[test]
+    fn length_of_line_works() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+        assert!(lsm.points().count() != 0);
+        let conf = ErrorMeasurementConf::builder()
+            .method(ErrorMeasurementMethod::Geodesic)
+            .zoom(21)
+            .build();
+
+        let cells = draw_linestring(&[lsm.clone()], 21, 21, None)
+            .iter()
+            .map(|pw| Cell {
+                coord: pw.point,
+                z: pw.z as u32,
+            })
+            .collect::<Vec<_>>();
+        // assert!(cells.len() > 0);
+
+        let cells_length = lsm
+            .lines()
+            .map(|lm| conf.length_of_line_in_cells((lm.from, lm.to), cells.iter().copied()))
+            .flatten()
+            .collect::<Vec<_>>();
+        // assert!(cells_length.len() > 0);
+
+        //length_of_line_in_cells
+        // let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
+        dbg!(&cells_length);
+        assert!(
+            cells_length.iter().all(|(_, d)| *d > 0.0),
+            "all lenghts should be greater than 0 (assuming linestrings don't have duplicate points"
+        );
+        assert!(false)
     }
 }
