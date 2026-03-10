@@ -214,28 +214,28 @@ pub fn grid_centroid_to_lng_lat(gp: Cell, _zoom: u8) -> Point<f64> {
         * (180_f64 / f64::consts::PI);
     Point(Coord { x: lon, y: lat })
 }
-fn point_to_polygon(gp: GPoint, zoom: u8) -> Polygon {
-    let lon = ((0.0 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
-    let lon_1 = ((1.0 + gp.x as f64) / (2_f64.powi(zoom as i32))) * 360_f64 - 180_f64;
+fn point_to_polygon(c: Cell) -> Polygon {
+    let lon = ((0.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
+    let lon_1 = ((1.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
 
     let lat = (f64::consts::PI
-        - ((0.0 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
+        - ((0.0 + c.coord.y as f64) / 2_f64.powi(c.z as i32) * 2_f64 * f64::consts::PI))
         .sinh()
         .atan()
         * (180_f64 / f64::consts::PI);
     let lat_1 = (f64::consts::PI
-        - ((1.0 + gp.y as f64) / 2_f64.powi(zoom as i32) * 2_f64 * f64::consts::PI))
+        - ((1.0 + c.coord.y as f64) / 2_f64.powi(c.z as i32) * 2_f64 * f64::consts::PI))
         .sinh()
         .atan()
         * (180_f64 / f64::consts::PI);
 
     let ps = LineString::from(vec![
+        (lon, lat_1),
         (lon, lat),
         (lon_1, lat),
         (lon_1, lat_1),
-        (lon, lat_1),
-        (lon, lat), /* remember to close the polygon */
-    ]); // TODO: ensure polygon is wound correctly
+        (lon, lat_1), /* remember to close the polygon */
+    ]); // TODO: ensure polygon is wound correctly // RE: seems to winding same as postgis now
 
     let poly = Polygon::new(ps, vec![]);
     //TODO: ensure this polygon is atleast somewhat consistent with postGIS
@@ -249,7 +249,7 @@ fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &Cell, _zoom: u8
 
 #[cfg(test)]
 mod test {
-    use geo::{Coord, Point};
+    use geo::{BooleanOps, Coord, GeodesicArea, Point};
     use hex;
     use linesonmaps::types::linestringm::LineStringM;
     use tilerizer::{Point as GPoint, draw_linestring};
@@ -467,10 +467,69 @@ mod test {
     }
     #[test]
     fn point_to_polygon_works() {
-        let gp = GPoint {
-            x: todo!(),
-            y: todo!(),
-        };
-        // point_to_polygon
+        let gp = GPoint { x: 10, y: 10 };
+        let c = Cell { coord: gp, z: 10 }; // quadkey = 0000003030
+
+        // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
+        let polygon = point_to_polygon(c);
+        // dbg!(polygon);
+        // assert!(false);
+    }
+    // #[test]
+    // fn adas() {
+    //     let gp = GPoint { x: 20, y: 20 };
+    //     let c = Cell { coord: gp, z: 11 }; // quadkey = 0000003030
+
+    //     // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
+    //     let polygon = point_to_polygon(c);
+    //     dbg!(polygon);
+    //     assert!(false);
+    // }
+
+    #[test]
+    fn point_to_polygon_sub_cell_contained() {
+        // use geo::algorithm::bool_ops::xor
+        let gp = GPoint { x: 10, y: 10 };
+        let c = Cell { coord: gp, z: 10 }; // quadkey = 0000003030
+
+        // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
+        let polygon = point_to_polygon(c);
+
+        let sub_poly = point_to_polygon(Cell {
+            coord: GPoint {
+                x: gp.x * 2,
+                y: gp.y * 2,
+            },
+            z: c.z+1,
+        });
+
+        // let mp = polygon.xor(&sub_poly); // this is stupid
+        let mp = sub_poly.difference(&polygon); // this is smart hehe
+        let a = mp.geodesic_area_unsigned();
+        dbg!(a);
+        assert!(a==0_f64); // dunno if this is the case for every sub-cell
+    }
+    #[test]
+    fn point_to_polygon_sub_cell_contained_finer_resolution() {
+        // use geo::algorithm::bool_ops::xor
+        let gp = GPoint { x: 10*11*2, y: 10*11*2 };
+        let c = Cell { coord: gp, z: 21 }; // quadkey = 0000003030
+
+        // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
+        let polygon = point_to_polygon(c);
+
+        let sub_poly = point_to_polygon(Cell {
+            coord: GPoint {
+                x: gp.x * 2,
+                y: gp.y * 2,
+            },
+            z: c.z+1,
+        });
+
+        // let mp = polygon.xor(&sub_poly); // this is stupid
+        let mp = sub_poly.difference(&polygon); // this is smart hehe
+        let a = mp.geodesic_area_unsigned();
+        dbg!(a);
+        assert!(a==0_f64); // dunno if this is the case for every sub-cell
     }
 }
