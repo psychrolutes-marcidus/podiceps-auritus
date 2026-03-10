@@ -1,9 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::f64;
 
-use geo::{Coord, Distance, GeoNum, Geodesic, LineString, Point, Polygon};
+use geo::algorithm::line_intersection::line_intersection;
+use geo::line_measures::LengthMeasurable;
+use geo::{
+    Contains, Coord, Distance, GeoNum, Geodesic, Intersects, Line, LineIntersection, LineString,
+    Point, Polygon,
+};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
-use tilerizer::{Point as GPoint, PointWTime, draw_2d_vessel, draw_linestring, point_to_grid};
+use tilerizer::{Point as GPoint, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
 
 pub type CellWithError = (Cell, f64);
@@ -72,7 +77,22 @@ impl ErrorMeasurementConf {
             .map(|ic| self.cell_to_nearest_ground_truth((f, s), &ic))
             .collect()
     }
+    /// only appropiate using linestring (not polygon) renderer
+    pub fn length_of_line_in_cells<Cells: Iterator<Item = Cell>>(
+        &self,
+        (f, s): (PointM<4326>, PointM<4326>),
+        cells: Cells,
+    ) -> Vec<CellWithError> {
+        let interpolated_cells = cells.filter(|p| {
+            p.coord == point_to_grid(f.coord.into(), self.zoom.into())
+                || p.coord == point_to_grid(s.coord.into(), self.zoom.into())
+        });
 
+        interpolated_cells
+            //TODO: filter out cells that dont intersect with any line segment
+            .map(|ic| self.length_of_line((f, s), &ic))
+            .collect()
+    }
     /// Should be called on the portion of a trajectory corresponding to a stop object
     pub fn stop_object_cell_to_ground_truth<Cells: Iterator<Item = Cell>>(
         &self,
@@ -87,6 +107,25 @@ impl ErrorMeasurementConf {
                 )
             })
             .collect()
+    }
+
+    fn length_of_line(&self, (f, s): (PointM<4326>, PointM<4326>), gp: &Cell) -> CellWithError {
+        let f = Point::new(f.coord.x, f.coord.y);
+        let s = Point::new(s.coord.x, s.coord.y);
+        let l = Line::new(f, s);
+        let poly = point_to_polygon(*gp);
+        assert!(poly.intersects(&l), "polygon and line must intersect");
+        let length = match poly.contains(&l) {
+            true => line_contained_in_polygon(&l, &poly),
+            false => {
+                if poly.contains(&f) || poly.contains(&s) {
+                    line_one_point_in_polygon(&l, &poly)
+                } else {
+                    line_no_end_point_in_polygon(&l, &poly)
+                }
+            }
+        };
+        (*gp, length)
     }
 
     fn cell_to_nearest_ground_truth(
@@ -214,6 +253,76 @@ pub fn grid_centroid_to_lng_lat(gp: Cell, _zoom: u8) -> Point<f64> {
         * (180_f64 / f64::consts::PI);
     Point(Coord { x: lon, y: lat })
 }
+
+/// i.e. used when `l` intersects `p` twice (without having either endpoint in `p`)
+fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
+    let ls = p.exterior().lines();
+    let intersections = ls
+        .filter_map(|pl| line_intersection(*l, pl)) // this contains 2 single point intersections OR one collinear intersection
+        .map(|i| match i {
+            LineIntersection::Collinear { intersection } => {
+                vec![intersection.start, intersection.end]
+            }
+            LineIntersection::SinglePoint {
+                intersection,
+                is_proper: _, /* we dont care if it is proper */
+            } => {
+                vec![intersection]
+            }
+        })
+        .flatten()
+        .take(2)
+        .collect::<Vec<_>>();
+    debug_assert_eq!(
+        intersections.len(),
+        2,
+        "function should only be called when there are 0 endpoints within the polygon"
+    );
+
+    Geodesic.distance(intersections[0].into(), intersections[1].into())
+    // todo!()
+}
+
+fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
+    let (f, s) = l.points();
+
+    let a = [(f, p.contains(&f)), (s, p.contains(&s))]
+        .into_iter()
+        .filter(|(_, b)| *b)
+        .map(|(q, _)| q)
+        .next()
+        .expect("atleast 1 point should be within the polygon");
+
+    let lsr = p.exterior().lines();
+
+    let intersection = lsr
+        .into_iter()
+        .filter_map(|pl| line_intersection(*l, pl))
+        .map(|i| match i {
+            LineIntersection::SinglePoint {
+                intersection,
+                is_proper: _,
+            } => intersection,
+            LineIntersection::Collinear { intersection } => {
+                // one of the endpoints is equal to the endpoin in the polygon
+                if intersection.start != a.0 {
+                    intersection.start
+                } else {
+                    intersection.end
+                }
+            }
+        })
+        .next()
+        .expect("should have exactly 1 intersecting point");
+
+    assert!(a != intersection.into());
+    Geodesic.distance(a, intersection.into())
+}
+
+fn line_contained_in_polygon(l: &Line, _p: &Polygon) -> f64 {
+    l.length(&Geodesic)
+}
+
 fn point_to_polygon(c: Cell) -> Polygon {
     let lon = ((0.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
     let lon_1 = ((1.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
@@ -500,19 +609,22 @@ mod test {
                 x: gp.x * 2,
                 y: gp.y * 2,
             },
-            z: c.z+1,
+            z: c.z + 1,
         });
 
         // let mp = polygon.xor(&sub_poly); // this is stupid
         let mp = sub_poly.difference(&polygon); // this is smart hehe
         let a = mp.geodesic_area_unsigned();
         dbg!(a);
-        assert!(a==0_f64); // dunno if this is the case for every sub-cell
+        assert!(a == 0_f64); // dunno if this is the case for every sub-cell
     }
     #[test]
     fn point_to_polygon_sub_cell_contained_finer_resolution() {
         // use geo::algorithm::bool_ops::xor
-        let gp = GPoint { x: 10*11*2, y: 10*11*2 };
+        let gp = GPoint {
+            x: 10 * 11 * 2,
+            y: 10 * 11 * 2,
+        };
         let c = Cell { coord: gp, z: 21 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
@@ -523,13 +635,13 @@ mod test {
                 x: gp.x * 2,
                 y: gp.y * 2,
             },
-            z: c.z+1,
+            z: c.z + 1,
         });
 
         // let mp = polygon.xor(&sub_poly); // this is stupid
         let mp = sub_poly.difference(&polygon); // this is smart hehe
         let a = mp.geodesic_area_unsigned();
         dbg!(a);
-        assert!(a==0_f64); // dunno if this is the case for every sub-cell
+        assert!(a == 0_f64); // dunno if this is the case for every sub-cell
     }
 }
