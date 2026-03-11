@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::f64;
 
-use geo::{Contains, GeoNum, Intersects, Line, Point};
+use geo::{Contains, GeoNum, Intersects, Line, Point, Relate};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
@@ -59,8 +59,8 @@ impl ErrorMeasurementConf {
         cells: Cells,
     ) -> Vec<CellWithError> {
         let interpolated_cells = cells.filter(|p| {
-            p.coord == point_to_grid(f.coord.into(), self.zoom.into())
-                || p.coord == point_to_grid(s.coord.into(), self.zoom.into())
+            !(p.coord == point_to_grid(f.coord.into(), self.zoom.into())
+                || p.coord == point_to_grid(s.coord.into(), self.zoom.into()))
         });
 
         interpolated_cells
@@ -73,14 +73,15 @@ impl ErrorMeasurementConf {
         (f, s): (PointM<4326>, PointM<4326>),
         cells: Cells,
     ) -> Vec<CellWithError> {
-        let interpolated_cells = cells.filter(|p| {
-            p.coord == point_to_grid(f.coord.into(), self.zoom.into())
-                || p.coord == point_to_grid(s.coord.into(), self.zoom.into())
-        });
+        // let interpolated_cells = cells.filter(|p| {
+        //     p.coord == point_to_grid(f.coord.into(), self.zoom.into())
+        //         || p.coord == point_to_grid(s.coord.into(), self.zoom.into())
+        // });
+        // interpolated_cells
 
-        interpolated_cells
+        cells
             .map(|ic| self.length_of_line((f, s), &ic))
-            .filter(|(_c, e)| *e != 0_f64) //TODO this should not be necessary
+            .filter(|(_c, e)| *e != 0_f64)
             .collect()
     }
     /// Should be called on the portion of a trajectory corresponding to a stop object
@@ -108,11 +109,13 @@ impl ErrorMeasurementConf {
         let s = Point::new(s.coord.x, s.coord.y);
         let l = Line::new(f, s);
         let poly = util::point_to_polygon(*gp);
-        assert!(poly.intersects(&l), "polygon and line must intersect");
-        let length = match poly.contains(&l) {
+        // assert!(poly.intersects(&l), "polygon and line must intersect");
+        let length = match poly.relate(&l).is_contains() {
             true => util::line_contained_in_polygon(&l, &poly),
             false => {
-                if poly.contains(&f) || poly.contains(&s) {
+                if poly.relate(&l).is_disjoint() {
+                    0_f64
+                } else if poly.contains(&f) || poly.contains(&s) {
                     util::line_one_point_in_polygon(&l, &poly)
                 } else {
                     util::line_no_end_point_in_polygon(&l, &poly)
