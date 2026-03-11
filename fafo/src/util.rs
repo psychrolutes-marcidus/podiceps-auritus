@@ -1,19 +1,7 @@
-use geo::Contains;
-use geo::Distance;
-use geo::LineString;
-
-use geo::Geodesic;
-
-use geo::LineIntersection;
-use geo::Polygon;
-
-use geo::Line;
-
-use geo::Coord;
-
-use geo::Point;
-use geo::line_intersection::line_intersection;
-use geo::line_measures::LengthMeasurable;
+use geo::{
+    Contains, Coord, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
+    line_intersection::line_intersection, line_measures::LengthMeasurable,
+};
 
 use crate::xyzcell;
 
