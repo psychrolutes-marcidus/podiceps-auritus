@@ -669,7 +669,7 @@ mod test {
         // let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
         dbg!(&cells_length);
         assert!(
-            cells_length.iter().all(|(_, d)| *d > 0.0),
+            cells_length.iter().all(|(_, d)| *d > 0.00001),
             "all lenghts should be greater than 0 (assuming linestrings don't have duplicate points"
         );
         assert!(false)
