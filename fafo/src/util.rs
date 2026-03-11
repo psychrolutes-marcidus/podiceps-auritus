@@ -5,9 +5,6 @@ use geo::LineString;
 use geo::Geodesic;
 
 use geo::LineIntersection;
-
-// use geo::algorithm::line_intersection::line_intersection::geo::algorithm::line_intersection;
-
 use geo::Polygon;
 
 use geo::Line;

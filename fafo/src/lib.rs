@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 use std::f64;
 
-use geo::algorithm::line_intersection::line_intersection;
-use geo::line_measures::LengthMeasurable;
-use geo::{Contains, Coord, Distance, GeoNum, Intersects, Line, Point};
+use geo::{Contains, GeoNum, Intersects, Line, Point};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
-use tilerizer::{Point as GPoint, draw_2d_vessel, draw_linestring, point_to_grid};
+use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
 
 pub type CellWithError = (xyzcell::Cell, f64);
@@ -82,7 +80,7 @@ impl ErrorMeasurementConf {
 
         interpolated_cells
             .map(|ic| self.length_of_line((f, s), &ic))
-            .filter(|(c, e)| *e != 0_f64) //TODO this should not be necessary
+            .filter(|(_c, e)| *e != 0_f64) //TODO this should not be necessary
             .collect()
     }
     /// Should be called on the portion of a trajectory corresponding to a stop object
