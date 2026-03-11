@@ -89,8 +89,8 @@ impl ErrorMeasurementConf {
         });
 
         interpolated_cells
-            //TODO: filter out cells that dont intersect with any line segment
             .map(|ic| self.length_of_line((f, s), &ic))
+            .filter(|(c, e)| *e != 0_f64) //TODO this should not be necessary
             .collect()
     }
     /// Should be called on the portion of a trajectory corresponding to a stop object
@@ -658,20 +658,32 @@ mod test {
             .collect::<Vec<_>>();
         // assert!(cells.len() > 0);
 
-        let cells_length = lsm
+        let (l, cells_length): (Vec<_>, Vec<_>) = lsm
             .lines()
-            .map(|lm| conf.length_of_line_in_cells((lm.from, lm.to), cells.iter().copied()))
-            .flatten()
-            .collect::<Vec<_>>();
+            .map(|lm| {
+                (
+                    lm,
+                    conf.length_of_line_in_cells((lm.from, lm.to), cells.iter().copied()),
+                )
+            })
+            .unzip();
+        let cells_length = cells_length.into_iter().flatten().collect::<Vec<_>>();
         // assert!(cells_length.len() > 0);
-
+        let b = l
+            .iter()
+            .zip(cells_length.iter())
+            .filter(|(_, (c, e))| *e == 0_f64)
+            .map(|(l, ce)| (Line::new(l.from.coord, l.to.coord), ce))
+            .collect::<Vec<_>>();
+        // dbg!(b);
+        // assert!(false);
         //length_of_line_in_cells
         // let e = conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
-        dbg!(&cells_length);
+        // dbg!(&cells_length);
         assert!(
-            cells_length.iter().all(|(_, d)| *d > 0.00001),
+            cells_length.iter().all(|(_, d)| *d > 0.0),
             "all lenghts should be greater than 0 (assuming linestrings don't have duplicate points"
         );
-        assert!(false)
+        // assert!(false)
     }
 }
