@@ -11,14 +11,9 @@ use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
 
-pub type CellWithError = (Cell, f64);
+pub type CellWithError = (xyzcell::Cell, f64);
 
-/// Represents the coordinates of an MVT tile
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub struct Cell {
-    pub coord: GPoint,
-    pub z: u32,
-}
+pub mod xyzcell;
 
 #[derive(Debug, Clone, Copy, TypedBuilder)]
 pub struct ErrorMeasurementConf {
@@ -63,7 +58,7 @@ impl ErrorMeasurementConf {
     }
 
     //TODO: this will not necessarily give the same result at [`ErrorMeasurementConf::measure_error_entire_linestring`], since it only has two points-worth of context (in opposed to a linestring)
-    pub fn cell_distance_to_ground_truth<Cells: Iterator<Item = Cell>>(
+    pub fn cell_distance_to_ground_truth<Cells: Iterator<Item = xyzcell::Cell>>(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
         cells: Cells,
@@ -78,7 +73,7 @@ impl ErrorMeasurementConf {
             .collect()
     }
     /// only appropiate using linestring (not polygon) renderer
-    pub fn length_of_line_in_cells<Cells: Iterator<Item = Cell>>(
+    pub fn length_of_line_in_cells<Cells: Iterator<Item = xyzcell::Cell>>(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
         cells: Cells,
@@ -94,7 +89,7 @@ impl ErrorMeasurementConf {
             .collect()
     }
     /// Should be called on the portion of a trajectory corresponding to a stop object
-    pub fn stop_object_cell_to_ground_truth<Cells: Iterator<Item = Cell>>(
+    pub fn stop_object_cell_to_ground_truth<Cells: Iterator<Item = xyzcell::Cell>>(
         &self,
         ground_truth: &[PointM<4326>],
         stop_object_cells: Cells,
@@ -109,7 +104,11 @@ impl ErrorMeasurementConf {
             .collect()
     }
 
-    fn length_of_line(&self, (f, s): (PointM<4326>, PointM<4326>), gp: &Cell) -> CellWithError {
+    fn length_of_line(
+        &self,
+        (f, s): (PointM<4326>, PointM<4326>),
+        gp: &xyzcell::Cell,
+    ) -> CellWithError {
         let f = Point::new(f.coord.x, f.coord.y);
         let s = Point::new(s.coord.x, s.coord.y);
         let l = Line::new(f, s);
@@ -131,7 +130,7 @@ impl ErrorMeasurementConf {
     fn cell_to_nearest_ground_truth(
         &self,
         (f, s): (PointM<4326>, PointM<4326>),
-        gp: &Cell,
+        gp: &xyzcell::Cell,
     ) -> CellWithError {
         match self.method {
             ErrorMeasurementMethod::CellTaxicab => {
@@ -158,7 +157,7 @@ impl ErrorMeasurementConf {
     fn calculate_error(
         &self,
         gt_ls: &LineStringM<4326>,
-        cells: &HashSet<Cell>,
+        cells: &HashSet<xyzcell::Cell>,
     ) -> Vec<CellWithError> {
         let ground_truth_cells = self.ground_truth_cells(&gt_ls);
         debug_assert!(
@@ -170,7 +169,11 @@ impl ErrorMeasurementConf {
             .map(|c| (*c, self.cell_to_nearest_point(gt_ls.points(), c)))
             .collect()
     }
-    fn cell_to_nearest_point<P: Iterator<Item = PointM<4326>>>(&self, gt: P, gp: &Cell) -> f64 {
+    fn cell_to_nearest_point<P: Iterator<Item = PointM<4326>>>(
+        &self,
+        gt: P,
+        gp: &xyzcell::Cell,
+    ) -> f64 {
         match self.method {
             ErrorMeasurementMethod::CellTaxicab => gt
                 .map(|p| point_to_grid(p.coord.into(), self.zoom.into()))
@@ -187,7 +190,7 @@ impl ErrorMeasurementConf {
         &self,
         gt_ls: &LineStringM<4326>,
         rendering_model: RenderingModel,
-    ) -> HashSet<Cell> {
+    ) -> HashSet<xyzcell::Cell> {
         let points = match rendering_model {
             RenderingModel::Linestring => draw_linestring(
                 &[gt_ls.to_owned()],
@@ -208,19 +211,19 @@ impl ErrorMeasurementConf {
         };
         points
             .into_iter()
-            .map(|pw| Cell {
+            .map(|pw| xyzcell::Cell {
                 coord: pw.point,
                 z: pw.z as u32,
             })
-            .collect::<HashSet<Cell>>()
+            .collect::<HashSet<xyzcell::Cell>>()
             .difference(&self.ground_truth_cells(gt_ls))
             .cloned()
             .collect()
     }
-    fn ground_truth_cells(&self, gt_ls: &LineStringM<4326>) -> HashSet<Cell> {
+    fn ground_truth_cells(&self, gt_ls: &LineStringM<4326>) -> HashSet<xyzcell::Cell> {
         gt_ls
             .points()
-            .map(|p| Cell {
+            .map(|p| xyzcell::Cell {
                 coord: point_to_grid(p.coord.into(), self.zoom.into()),
                 z: self.zoom.into(),
             })
@@ -232,7 +235,7 @@ impl ErrorMeasurementConf {
 /// Useful after rendering and scoring all cells in a trajectory with [`ErrorMeasurementConf::cell_distance_to_ground_truth`] since it may yield multiple instances of the same cell
 pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<CellWithError> {
     let s = cells.size_hint();
-    let mut map = HashMap::<Cell, f64>::with_capacity(s.1.unwrap_or(s.0));
+    let mut map = HashMap::<xyzcell::Cell, f64>::with_capacity(s.1.unwrap_or(s.0));
 
     cells.for_each(|(p, e)| {
         map.entry(p).and_modify(|v| *v = v.min(e)).or_insert(e);
@@ -242,7 +245,7 @@ pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<C
 }
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-pub fn grid_centroid_to_lng_lat(gp: Cell, _zoom: u8) -> Point<f64> {
+pub fn grid_centroid_to_lng_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
     // seems to be close enough (not perfectly consistent with PostGIS)
     //TODO: might be incorrect since the original formula finds the nort-westernmost point
     let lon = ((0.5 + gp.coord.x as f64) / (2_f64.powi(gp.z as i32))) * 360_f64 - 180_f64;
@@ -323,7 +326,7 @@ fn line_contained_in_polygon(l: &Line, _p: &Polygon) -> f64 {
     l.length(&Geodesic)
 }
 
-fn point_to_polygon(c: Cell) -> Polygon {
+fn point_to_polygon(c: xyzcell::Cell) -> Polygon {
     let lon = ((0.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
     let lon_1 = ((1.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
 
@@ -352,7 +355,7 @@ fn point_to_polygon(c: Cell) -> Polygon {
     poly
 }
 
-fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &Cell, _zoom: u8) -> f64 {
+fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &xyzcell::Cell, _zoom: u8) -> f64 {
     Geodesic.distance(grid_centroid_to_lng_lat(*gp, gp.z as u8), p.into())
 }
 
@@ -366,6 +369,7 @@ mod test {
     use tilerizer::{Point as GPoint, draw_line, draw_linestring};
     use wkb::reader::read_wkb;
 
+    use crate::xyzcell::Cell;
     use crate::*;
     use tinymvt::webmercator::lnglat_to_zxy;
 
@@ -485,7 +489,7 @@ mod test {
         let grid = lnglat_to_zxy(21, x, y);
 
         let Point(Coord { x: rx, y: ry }) = grid_centroid_to_lng_lat(
-            Cell {
+            xyzcell::Cell {
                 coord: GPoint {
                     x: grid.1 as i32,
                     y: grid.2 as i32,
@@ -524,7 +528,7 @@ mod test {
                         None,
                     )
                     .iter()
-                    .map(|gpwt| Cell {
+                    .map(|gpwt| xyzcell::Cell {
                         coord: gpwt.point,
                         z: gpwt.z as u32,
                     })
@@ -550,7 +554,10 @@ mod test {
             vec![(GPoint { x: 1, y: 1 }, (5.0)), (GPoint { x: 2, y: 2 }, 7.0)],
         ]
         .into_iter()
-        .map(|v| v.into_iter().map(|(p, e)| (Cell { coord: p, z: 0 }, e)));
+        .map(|v| {
+            v.into_iter()
+                .map(|(p, e)| (xyzcell::Cell { coord: p, z: 0 }, e))
+        });
 
         let mut m = merge_cells(errors.into_iter().flatten());
 
@@ -579,7 +586,7 @@ mod test {
     #[test]
     fn point_to_polygon_works() {
         let gp = GPoint { x: 10, y: 10 };
-        let c = Cell { coord: gp, z: 10 }; // quadkey = 0000003030
+        let c = xyzcell::Cell { coord: gp, z: 10 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
         let polygon = point_to_polygon(c);
@@ -591,12 +598,12 @@ mod test {
     fn point_to_polygon_sub_cell_contained() {
         // use geo::algorithm::bool_ops::xor
         let gp = GPoint { x: 10, y: 10 };
-        let c = Cell { coord: gp, z: 10 }; // quadkey = 0000003030
+        let c = xyzcell::Cell { coord: gp, z: 10 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
         let polygon = point_to_polygon(c);
 
-        let sub_poly = point_to_polygon(Cell {
+        let sub_poly = point_to_polygon(xyzcell::Cell {
             coord: GPoint {
                 x: gp.x * 2,
                 y: gp.y * 2,
@@ -617,12 +624,12 @@ mod test {
             x: 10 * 11 * 2,
             y: 10 * 11 * 2,
         };
-        let c = Cell { coord: gp, z: 21 }; // quadkey = 0000003030
+        let c = xyzcell::Cell { coord: gp, z: 21 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
         let polygon = point_to_polygon(c);
 
-        let sub_poly = point_to_polygon(Cell {
+        let sub_poly = point_to_polygon(xyzcell::Cell {
             coord: GPoint {
                 x: gp.x * 2,
                 y: gp.y * 2,
@@ -651,7 +658,7 @@ mod test {
 
         let cells = draw_linestring(&[lsm.clone()], 21, 21, None)
             .iter()
-            .map(|pw| Cell {
+            .map(|pw| xyzcell::Cell {
                 coord: pw.point,
                 z: pw.z as u32,
             })
