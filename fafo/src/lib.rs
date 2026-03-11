@@ -5,10 +5,10 @@ use geo::{Contains, GeoNum, Intersects, Line, Point};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
+pub mod util;
+pub mod xyzcell;
 
 pub type CellWithError = (xyzcell::Cell, f64);
-
-pub mod xyzcell;
 
 #[derive(Debug, Clone, Copy, TypedBuilder)]
 pub struct ErrorMeasurementConf {
@@ -226,16 +226,13 @@ impl ErrorMeasurementConf {
     }
 }
 
-pub mod util;
-
 #[cfg(test)]
 mod test {
-    use std::cell;
 
     use geo::{BooleanOps, Coord, GeodesicArea, Point};
     use hex;
     use linesonmaps::types::linestringm::LineStringM;
-    use tilerizer::{Point as GPoint, draw_line, draw_linestring};
+    use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
     use crate::xyzcell::Cell;
