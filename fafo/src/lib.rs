@@ -1,12 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::f64;
 
 use geo::algorithm::line_intersection::line_intersection;
 use geo::line_measures::LengthMeasurable;
-use geo::{
-    Contains, Coord, Distance, GeoNum, Geodesic, Intersects, Line, LineIntersection, LineString,
-    Point, Polygon,
-};
+use geo::{Contains, Coord, Distance, GeoNum, Intersects, Line, Point};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{Point as GPoint, draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
@@ -112,15 +109,15 @@ impl ErrorMeasurementConf {
         let f = Point::new(f.coord.x, f.coord.y);
         let s = Point::new(s.coord.x, s.coord.y);
         let l = Line::new(f, s);
-        let poly = point_to_polygon(*gp);
+        let poly = util::point_to_polygon(*gp);
         assert!(poly.intersects(&l), "polygon and line must intersect");
         let length = match poly.contains(&l) {
-            true => line_contained_in_polygon(&l, &poly),
+            true => util::line_contained_in_polygon(&l, &poly),
             false => {
                 if poly.contains(&f) || poly.contains(&s) {
-                    line_one_point_in_polygon(&l, &poly)
+                    util::line_one_point_in_polygon(&l, &poly)
                 } else {
-                    line_no_end_point_in_polygon(&l, &poly)
+                    util::line_no_end_point_in_polygon(&l, &poly)
                 }
             }
         };
@@ -147,8 +144,8 @@ impl ErrorMeasurementConf {
                 }
             }
             ErrorMeasurementMethod::Geodesic => {
-                let first = ground_truth_to_cell_geodesic(f, gp, self.zoom);
-                let second = ground_truth_to_cell_geodesic(s, gp, self.zoom);
+                let first = util::ground_truth_to_cell_geodesic(f, gp, self.zoom);
+                let second = util::ground_truth_to_cell_geodesic(s, gp, self.zoom);
                 let min = first.min(second);
                 (*gp, min)
             }
@@ -181,7 +178,7 @@ impl ErrorMeasurementConf {
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                .map(|p| ground_truth_to_cell_geodesic(p, &gp, self.zoom))
+                .map(|p| util::ground_truth_to_cell_geodesic(p, &gp, self.zoom))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
@@ -231,133 +228,7 @@ impl ErrorMeasurementConf {
     }
 }
 
-/// deduplicates a nested list of cells (with their corresponding errors) by picking the minimum error value.
-/// Useful after rendering and scoring all cells in a trajectory with [`ErrorMeasurementConf::cell_distance_to_ground_truth`] since it may yield multiple instances of the same cell
-pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<CellWithError> {
-    let s = cells.size_hint();
-    let mut map = HashMap::<xyzcell::Cell, f64>::with_capacity(s.1.unwrap_or(s.0));
-
-    cells.for_each(|(p, e)| {
-        map.entry(p).and_modify(|v| *v = v.min(e)).or_insert(e);
-    });
-
-    map.into_iter().collect()
-}
-
-// implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-pub fn grid_centroid_to_lng_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
-    // seems to be close enough (not perfectly consistent with PostGIS)
-    //TODO: might be incorrect since the original formula finds the nort-westernmost point
-    let lon = ((0.5 + gp.coord.x as f64) / (2_f64.powi(gp.z as i32))) * 360_f64 - 180_f64;
-    let lat = (f64::consts::PI
-        - ((0.5 + gp.coord.y as f64) / 2_f64.powi(gp.z as i32) * 2_f64 * f64::consts::PI))
-        .sinh()
-        .atan()
-        * (180_f64 / f64::consts::PI);
-    Point(Coord { x: lon, y: lat })
-}
-
-/// i.e. used when `l` intersects `p` twice (without having either endpoint in `p`)
-fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
-    let ls = p.exterior().lines();
-    let intersections = ls
-        .filter_map(|pl| line_intersection(*l, pl)) // this contains 2 single point intersections OR one collinear intersection
-        .map(|i| match i {
-            LineIntersection::Collinear { intersection } => {
-                vec![intersection.start, intersection.end]
-            }
-            LineIntersection::SinglePoint {
-                intersection,
-                is_proper: _, /* we dont care if it is proper */
-            } => {
-                vec![intersection]
-            }
-        })
-        .flatten()
-        .take(2)
-        .collect::<Vec<_>>();
-    debug_assert_eq!(
-        intersections.len(),
-        2,
-        "function should only be called when there are 0 endpoints within the polygon"
-    );
-
-    Geodesic.distance(intersections[0].into(), intersections[1].into())
-    // todo!()
-}
-
-fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
-    let (f, s) = l.points();
-
-    let a = [(f, p.contains(&f)), (s, p.contains(&s))]
-        .into_iter()
-        .filter(|(_, b)| *b)
-        .map(|(q, _)| q)
-        .next()
-        .expect("atleast 1 point should be within the polygon");
-
-    let lsr = p.exterior().lines();
-
-    let intersection = lsr
-        .into_iter()
-        .filter_map(|pl| line_intersection(*l, pl))
-        .map(|i| match i {
-            LineIntersection::SinglePoint {
-                intersection,
-                is_proper: _,
-            } => intersection,
-            LineIntersection::Collinear { intersection } => {
-                // one of the endpoints is equal to the endpoin in the polygon
-                if intersection.start != a.0 {
-                    intersection.start
-                } else {
-                    intersection.end
-                }
-            }
-        })
-        .next()
-        .expect("should have exactly 1 intersecting point");
-
-    assert!(a != intersection.into());
-    Geodesic.distance(a, intersection.into())
-}
-
-fn line_contained_in_polygon(l: &Line, _p: &Polygon) -> f64 {
-    l.length(&Geodesic)
-}
-
-fn point_to_polygon(c: xyzcell::Cell) -> Polygon {
-    let lon = ((0.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
-    let lon_1 = ((1.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
-
-    let lat = (f64::consts::PI
-        - ((0.0 + c.coord.y as f64) / 2_f64.powi(c.z as i32) * 2_f64 * f64::consts::PI))
-        .sinh()
-        .atan()
-        * (180_f64 / f64::consts::PI);
-    let lat_1 = (f64::consts::PI
-        - ((1.0 + c.coord.y as f64) / 2_f64.powi(c.z as i32) * 2_f64 * f64::consts::PI))
-        .sinh()
-        .atan()
-        * (180_f64 / f64::consts::PI);
-
-    let ps = LineString::from(vec![
-        (lon, lat_1),
-        (lon, lat),
-        (lon_1, lat),
-        (lon_1, lat_1),
-        (lon, lat_1), /* remember to close the polygon */
-    ]); // TODO: ensure polygon is wound correctly // RE: seems to winding same as postgis now
-
-    let poly = Polygon::new(ps, vec![]);
-    //TODO: ensure this polygon is atleast somewhat consistent with postGIS
-
-    poly
-}
-
-fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(p: P, gp: &xyzcell::Cell, _zoom: u8) -> f64 {
-    Geodesic.distance(grid_centroid_to_lng_lat(*gp, gp.z as u8), p.into())
-}
+pub mod util;
 
 #[cfg(test)]
 mod test {
@@ -488,7 +359,7 @@ mod test {
 
         let grid = lnglat_to_zxy(21, x, y);
 
-        let Point(Coord { x: rx, y: ry }) = grid_centroid_to_lng_lat(
+        let Point(Coord { x: rx, y: ry }) = util::grid_centroid_to_lng_lat(
             xyzcell::Cell {
                 coord: GPoint {
                     x: grid.1 as i32,
@@ -559,7 +430,7 @@ mod test {
                 .map(|(p, e)| (xyzcell::Cell { coord: p, z: 0 }, e))
         });
 
-        let mut m = merge_cells(errors.into_iter().flatten());
+        let mut m = util::merge_cells(errors.into_iter().flatten());
 
         m.sort_by_key(|k| k.0.coord.x);
 
@@ -589,7 +460,7 @@ mod test {
         let c = xyzcell::Cell { coord: gp, z: 10 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-        let polygon = point_to_polygon(c);
+        let polygon = util::point_to_polygon(c);
         // dbg!(polygon);
         // assert!(false);
     }
@@ -601,9 +472,9 @@ mod test {
         let c = xyzcell::Cell { coord: gp, z: 10 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-        let polygon = point_to_polygon(c);
+        let polygon = util::point_to_polygon(c);
 
-        let sub_poly = point_to_polygon(xyzcell::Cell {
+        let sub_poly = util::point_to_polygon(xyzcell::Cell {
             coord: GPoint {
                 x: gp.x * 2,
                 y: gp.y * 2,
@@ -627,9 +498,9 @@ mod test {
         let c = xyzcell::Cell { coord: gp, z: 21 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-        let polygon = point_to_polygon(c);
+        let polygon = util::point_to_polygon(c);
 
-        let sub_poly = point_to_polygon(xyzcell::Cell {
+        let sub_poly = util::point_to_polygon(xyzcell::Cell {
             coord: GPoint {
                 x: gp.x * 2,
                 y: gp.y * 2,
