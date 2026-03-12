@@ -8,16 +8,26 @@
 - [Foreign tables in postgres dev environment]
 - [Implement missing spatial operations in DuckDB]
 - [Port extension to DuckDB]
+- [Reimplement postgres (materialized) views in DuckDB]
 
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
 - [Calculate confidence for a cell given a vessel] (Rasmus)
+- [Reimplement postgres (materialized) views in DuckDB] (Anders)
 
 # DONE
 - [Refactor postgres extension] (Rasmus)
 
 # Task Descriptions
+
+
+
+### changes over time
+- [x] Vessel type
+- [x] transponder type ?
+- [x] vessel dimensions (over time)
+- [x] vessel offset values (i.e. a,b,c,d)
 
 ## Refactor postgres extension
 The postgres extension functions in tileheater are somewhat linked to some of the algorithmic work.
