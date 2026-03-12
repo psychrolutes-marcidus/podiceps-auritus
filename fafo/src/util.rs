@@ -10,18 +10,7 @@ use std::f64;
 
 use super::CellWithError;
 
-/// deduplicates a nested list of cells (with their corresponding errors) by picking the minimum error value.
-/// Useful after rendering and scoring all cells in a trajectory with [`ErrorMeasurementConf::cell_distance_to_ground_truth`] since it may yield multiple instances of the same cell
-pub fn merge_cells<Cells: Iterator<Item = CellWithError>>(cells: Cells) -> Vec<CellWithError> {
-    let s = cells.size_hint();
-    let mut map = HashMap::<xyzcell::Cell, f64>::with_capacity(s.1.unwrap_or(s.0));
 
-    cells.for_each(|(p, e)| {
-        map.entry(p).and_modify(|v| *v = v.min(e)).or_insert(e);
-    });
-
-    map.into_iter().collect()
-}
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lng_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
