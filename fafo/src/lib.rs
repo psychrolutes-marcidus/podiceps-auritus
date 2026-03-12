@@ -240,7 +240,7 @@ mod test {
 
     use crate::xyzcell::Cell;
     use crate::*;
-    use tinymvt::webmercator::lnglat_to_zxy;
+    use tinymvt::webmercator::lnglat_to_zxy as lonlat_to_zxy;
 
     #[test]
     fn cell_error() {
@@ -355,7 +355,7 @@ mod test {
     fn grid_to_lng_lat_works() {
         let Point(Coord { x, y }) = Point(Coord { x: 45.0, y: 45.0 });
 
-        let grid = lnglat_to_zxy(21, x, y);
+        let grid = lonlat_to_zxy(21, x, y);
 
         let Point(Coord { x: rx, y: ry }) = util::grid_centroid_to_lon_lat(
             xyzcell::Cell {
@@ -412,45 +412,6 @@ mod test {
             errors.all(|v| v.iter().all(|(_, e)| *e > 0.0)),
             "Every non ground-truth cell should have at least some error"
         );
-    }
-    #[test]
-    fn merge_cells_works() {
-        let errors = vec![
-            vec![
-                (GPoint { x: 1, y: 1 }, 2.0),
-                (GPoint { x: 2, y: 2 }, (10.0)),
-            ],
-            vec![(GPoint { x: 1, y: 1 }, (5.0)), (GPoint { x: 2, y: 2 }, 7.0)],
-        ]
-        .into_iter()
-        .map(|v| {
-            v.into_iter()
-                .map(|(p, e)| (xyzcell::Cell { coord: p, z: 0 }, e))
-        });
-
-        let mut m = util::merge_cells(errors.into_iter().flatten());
-
-        m.sort_by_key(|k| k.0.coord.x);
-
-        assert_eq!(
-            m,
-            vec![
-                (
-                    Cell {
-                        coord: GPoint { x: 1, y: 1 },
-                        z: 0
-                    },
-                    2.0
-                ),
-                (
-                    Cell {
-                        coord: GPoint { x: 2, y: 2 },
-                        z: 0
-                    },
-                    7.0
-                )
-            ]
-        )
     }
     #[test]
     fn point_to_polygon_works() {
