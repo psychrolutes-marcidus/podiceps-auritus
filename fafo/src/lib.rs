@@ -109,11 +109,11 @@ impl ErrorMeasurementConf {
         let s = Point::new(s.coord.x, s.coord.y);
         let l = Line::new(f, s);
         let poly = util::point_to_polygon(*gp);
-        // assert!(poly.intersects(&l), "polygon and line must intersect");
-        let length = match poly.relate(&l).is_contains() {
+        let mat = poly.relate(&l);
+        let length = match mat.is_covers() {
             true => util::line_contained_in_polygon(&l, &poly),
             false => {
-                if poly.relate(&l).is_disjoint() {
+                if mat.is_disjoint() {
                     0_f64
                 } else if poly.contains(&f) || poly.contains(&s) {
                     util::line_one_point_in_polygon(&l, &poly)
