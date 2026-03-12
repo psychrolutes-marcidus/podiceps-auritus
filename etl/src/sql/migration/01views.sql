@@ -1,4 +1,3 @@
-BEGIN;
 
 -- note: The following views do not perform any filtering on MMSI, so expect buoys and aircraft
 INSTALL spatial;
@@ -108,4 +107,3 @@ FROM
 
 COMMENT ON VIEW vessel_attributes.pos_type_name IS 'method used for obtaining position';
 
-COMMIT;
