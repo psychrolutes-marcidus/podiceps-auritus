@@ -109,18 +109,3 @@ FROM
 COMMENT ON VIEW vessel_attributes.pos_type_name IS 'method used for obtaining position';
 
 COMMIT;
-
-/* SELECT
-*
-FROM
-vessel_attributes.rot
-WHERE
-rot IS NOT NULL
-USING SAMPLE
-100 rows; */
-/* SELECT
-*
-FROM
-(
-PIVOT vessel_attributes.pos_type_name ON pos_type_name USING count(mmsi)
-); */
