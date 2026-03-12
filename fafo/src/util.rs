@@ -13,7 +13,7 @@ use super::CellWithError;
 
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-pub fn grid_centroid_to_lng_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
+pub fn grid_centroid_to_lon_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
     // seems to be close enough (not perfectly consistent with PostGIS)
     //TODO: might be incorrect since the original formula finds the nort-westernmost point
     let lon = ((0.5 + gp.coord.x as f64) / (2_f64.powi(gp.z as i32))) * 360_f64 - 180_f64;
@@ -128,5 +128,5 @@ pub(crate) fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(
     gp: &xyzcell::Cell,
     _zoom: u8,
 ) -> f64 {
-    Geodesic.distance(grid_centroid_to_lng_lat(*gp, gp.z as u8), p.into())
+    Geodesic.distance(grid_centroid_to_lon_lat(*gp, gp.z as u8), p.into())
 }

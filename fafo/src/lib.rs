@@ -357,7 +357,7 @@ mod test {
 
         let grid = lnglat_to_zxy(21, x, y);
 
-        let Point(Coord { x: rx, y: ry }) = util::grid_centroid_to_lng_lat(
+        let Point(Coord { x: rx, y: ry }) = util::grid_centroid_to_lon_lat(
             xyzcell::Cell {
                 coord: GPoint {
                     x: grid.1 as i32,
