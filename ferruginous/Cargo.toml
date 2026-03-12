@@ -11,7 +11,7 @@ lto = true
 strip = true
 
 [dependencies]
-duckdb = { version = "1.4.4", features = ["loadable-extension"] }
+duckdb = { version = "1.4.4", features = ["loadable-extension", "vscalar"] }
 libduckdb-sys = "1.4.4"
 
 [lints]

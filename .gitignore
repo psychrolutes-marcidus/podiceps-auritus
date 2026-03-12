@@ -94,5 +94,6 @@ segment_experiment/*.txt
 
 *.pq
 *.db
+*.vortex
 
 ferruginous/configure

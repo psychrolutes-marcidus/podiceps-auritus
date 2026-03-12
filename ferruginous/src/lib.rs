@@ -1,11 +1,14 @@
-use std::{error::Error, sync::atomic::AtomicBool};
+use std::{error::Error, ffi::c_int, sync::atomic::AtomicBool};
 
 use duckdb::{
-    Connection,
-    core::{LogicalTypeHandle, LogicalTypeId},
+    core::{Inserter, LogicalTypeHandle, LogicalTypeId},
     duckdb_entrypoint_c_api,
     vtab::VTab,
+    Connection,
 };
+
+// pub mod etl;
+
 const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
 
 #[repr(C)]
@@ -28,28 +31,44 @@ impl VTab for HelloVTab {
     fn bind(
         bind: &duckdb::vtab::BindInfo,
     ) -> duckdb::Result<Self::BindData, Box<dyn std::error::Error>> {
-        bind.add_result_column("column0", LogicalTypeHandle::from(LogicalTypeId::Varchar));
+        bind.add_result_column("type", LogicalTypeHandle::from(LogicalTypeId::Integer));
         let name = bind.get_parameter(0).to_string();
         Ok(HelloBindData { name })
     }
 
     fn init(
-        init: &duckdb::vtab::InitInfo,
+        _init: &duckdb::vtab::InitInfo,
     ) -> duckdb::Result<Self::InitData, Box<dyn std::error::Error>> {
-        todo!()
+        Ok(HelloInitData {
+            done: AtomicBool::new(false),
+        })
     }
 
     fn func(
         func: &duckdb::vtab::TableFunctionInfo<Self>,
         output: &mut duckdb::core::DataChunkHandle,
     ) -> duckdb::Result<(), Box<dyn std::error::Error>> {
-        todo!()
+        let init_data = func.get_init_data();
+        let bind_data = func.get_bind_data();
+        if init_data
+            .done
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            output.set_len(0);
+        } else {
+            let mut vector = output.flat_vector(0);
+            let data = vec![42_i32, 60_i32];
+            vector.copy(&data);
+            output.set_len(2);
+        }
+        Ok(())
+    }
+    fn parameters() -> Option<Vec<LogicalTypeHandle>> {
+        Some(vec![LogicalTypeHandle::from(LogicalTypeId::Varchar)])
     }
 }
 
-#[duckdb_entrypoint_c_api()]
-pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
-    con.register_table_function::<HelloVTab>(EXTENSION_NAME)
-        .expect("Failed to register hello table function");
-    Ok(())
+#[no_mangle]
+pub unsafe extern "C" fn ferruginous_init_c_api() {
+    println!("Hello");
 }
