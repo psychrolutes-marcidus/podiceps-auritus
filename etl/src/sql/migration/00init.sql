@@ -10,6 +10,8 @@ CREATE OR REPLACE VIEW draught_by_ship_type AS (SELECT DISTINCT ship_type, draug
 CREATE OR REPLACE VIEW draught_by_all AS (SELECT DISTINCT draught, count(*) as samples FROM ais_data WHERE draught IS NOT NULL GROUP BY draught);
 CREATE OR REPLACE VIEW draught_by_mmsi AS (SELECT DISTINCT mmsi, draught, count(*) as samples FROM ais_data WHERE draught IS NOT NULL GROUP BY mmsi, draught);
 
+CREATE SCHEMA IF NOT EXISTS vessel_attributes;
+
 CREATE OR REPLACE VIEW vessel_attributes.transponder AS
 SELECT
     mmsi,
@@ -111,6 +113,7 @@ COMMENT ON VIEW vessel_attributes.pos_type_name IS 'method used for obtaining po
 
 CREATE OR REPLACE VIEW vessel_attributes.draught AS (
     SELECT mmsi, "timestamp", draught
-    FROM main.ais_data;
+    FROM main.ais_data
 );
+
 COMMENT ON VIEW vessel_attributes.draught IS 'draught reported by all vessels in a single view';
