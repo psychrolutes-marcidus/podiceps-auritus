@@ -8,16 +8,15 @@
 - [Foreign tables in postgres dev environment]
 - [Implement missing spatial operations in DuckDB]
 - [Port extension to DuckDB]
-- [Reimplement postgres (materialized) views in DuckDB]
+- [Calculate confidence for a cell given a vessel]
 
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
-- [Calculate confidence for a cell given a vessel] (Rasmus)
-- [Reimplement postgres (materialized) views in DuckDB] (Anders)
 
 # DONE
 - [Refactor postgres extension] (Rasmus)
+- [Reimplement postgres (materialized) views in DuckDB] (Rasmus and Anders)
 
 # Task Descriptions
 
