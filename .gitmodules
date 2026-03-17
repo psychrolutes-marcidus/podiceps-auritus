@@ -1,0 +1,3 @@
+[submodule "ferruginous/extension-ci-tools"]
+	path = ferruginous/extension-ci-tools
+	url = https://github.com/duckdb/extension-ci-tools.git

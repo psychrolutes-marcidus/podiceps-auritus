@@ -5,22 +5,22 @@
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
-- [Reimplement postgres (materialized) views in DuckDB] (Anders)
 - [Load depthmodel into the DuckDB Database] (Anders)
 - [Port extension to DuckDB] (Rasmus)
 
 # DONE
 - [Refactor postgres extension] (Rasmus)
+- [Reimplement postgres (materialized) views in DuckDB] (Rasmus and Anders)
 
 # Task Descriptions
 
 
-## Reimplement postgres (materialized) views in DuckDB
+
 ### changes over time
-- [ ] Vessel type
-- [ ] transponder type ?
-- [ ] vessel dimensions (over time)
-- [ ] vessel offset values (i.e. a,b,c,d)
+- [x] Vessel type
+- [x] transponder type ?
+- [x] vessel dimensions (over time)
+- [x] vessel offset values (i.e. a,b,c,d)
 
 ## Refactor postgres extension
 The postgres extension functions in tileheater are somewhat linked to some of the algorithmic work.
