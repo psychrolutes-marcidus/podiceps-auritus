@@ -26,21 +26,20 @@ pub struct FilterTile(pub i32, pub i32, pub i32);
 impl Zoom for PointWZ {
     fn change_zoom(self, zoom_level: i32) -> Self {
         let change = self.z - zoom_level;
-        let x;
+ let x;
         let y;
 
         if change > 0 {
-            x = self.point.x / 2_i32.pow(change.abs() as u32);
-            y = self.point.y / 2_i32.pow(change.abs() as u32);
+            x = self.point.x / 2_i32.pow(change.unsigned_abs());
+            y = self.point.y / 2_i32.pow(change.unsigned_abs());
         } else {
-            x = self.point.x / 2_i32.pow(change.abs() as u32);
-            y = self.point.y / 2_i32.pow(change.abs() as u32);
+            x = self.point.x * 2_i32.pow(change.unsigned_abs());
+            y = self.point.y * 2_i32.pow(change.unsigned_abs());
         }
 
         Self {
-            point: Point { x: x, y: y },
+            point: Point { x, y },
             z: zoom_level,
-            ..self
         }
     }
 }
@@ -64,11 +63,11 @@ impl Zoom for PointWTime {
         let y;
 
         if change > 0 {
-            x = self.point.x / 2_i32.pow(change.abs() as u32);
-            y = self.point.y / 2_i32.pow(change.abs() as u32);
+            x = self.point.x / 2_i32.pow(change.unsigned_abs());
+            y = self.point.y / 2_i32.pow(change.unsigned_abs());
         } else {
-            x = self.point.x * 2_i32.pow(change.abs() as u32);
-            y = self.point.y * 2_i32.pow(change.abs() as u32);
+            x = self.point.x * 2_i32.pow(change.unsigned_abs());
+            y = self.point.y * 2_i32.pow(change.unsigned_abs());
         }
 
         Self {
@@ -97,20 +96,20 @@ pub fn draw_linestring(
     filter_tile: Option<FilterTile>,
 ) -> Vec<PointWTime> {
     ls.iter()
-        .map(|ls| {
+        .flat_map(|ls| {
             let mut point_ext: Vec<PointWTime> = ls
                 .points()
                 .map(|p| {
                     (
                         point_to_grid((p.coord.x, p.coord.y).into(), sampling_zoom_level),
-                        DateTime::from_timestamp_secs(p.coord.m as i64).unwrap(),
+                        DateTime::from_timestamp_secs(p.coord.m as i64)
+                            .expect("timestamp should be well within range "),
                     )
                 })
                 .tuple_windows()
-                .map(|((ap, at), (bp, bt))| {
+                .flat_map(|((ap, at), (bp, bt))| {
                     enhance_point(draw_line(ap, bp), at, bt, sampling_zoom_level)
                 })
-                .flatten()
                 .filter(|p| match filter_tile {
                     Some(ft) => {
                         let point = p.change_zoom(ft.2);
@@ -134,10 +133,10 @@ pub fn draw_linestring(
                 })
                 .collect::<Vec<PointWTime>>()
         })
-        .flatten()
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_2d_vessel(
     ls: &[LineStringM<4326>],
     a: i16,
@@ -150,7 +149,7 @@ pub fn draw_2d_vessel(
 ) -> Vec<PointWTime> {
     let mut points: Vec<_> = ls
         .iter()
-        .map(|lm| {
+        .flat_map(|lm| {
             lm.lines()
                 .map(|line: LineM<4326>| {
                     line_to_triangle_pair(&line, a as f64, b as f64, c as f64, d as f64)
@@ -165,7 +164,6 @@ pub fn draw_2d_vessel(
                 .map(|x| x.change_zoom(zoom_level))
                 .collect::<Vec<_>>()
         })
-        .flatten()
         .filter(|p: &PointWTime| match filter_tile {
             Some(ft) => {
                 let point = p.change_zoom(ft.2);
@@ -209,7 +207,7 @@ pub fn enhance_point(
             time_end: time_to,
         }];
     }
-    if points.len() == 0 {
+    if points.is_empty() {
         return Vec::new();
     }
 
@@ -258,9 +256,7 @@ pub fn point_time_duration(
 ) -> chrono::TimeDelta {
     let dt = time_to.signed_duration_since(time_from);
 
-    let duration = dt.checked_div(point_count).unwrap_or(dt);
-
-    return duration;
+    dt.checked_div(point_count).unwrap_or(dt)
 }
 
 pub fn draw_line(from: Point, to: Point) -> Vec<Point> {
