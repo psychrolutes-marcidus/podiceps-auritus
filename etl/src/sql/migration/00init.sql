@@ -117,3 +117,10 @@ CREATE OR REPLACE VIEW vessel_attributes.draught AS (
 );
 
 COMMENT ON VIEW vessel_attributes.draught IS 'draught reported by all vessels in a single view';
+
+CREATE OR REPLACE VIEW vessel_attributes.heading AS (
+    SELECT mmsi, "timestamp", heading
+    FROM main.ais_data
+);
+
+COMMENT ON VIEW vessel_attributes.heading IS 'Heading';
