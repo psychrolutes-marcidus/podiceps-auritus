@@ -1,13 +1,13 @@
 # TODO
 - [Combine cell probability with metadata]
-- [Port extension to DuckDB]
-- [Reimplement postgres (materialized) views in DuckDB]
+- [Calculate confidence for a cell given a vessel]
 
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
-- [Calculate confidence for a cell given a vessel] (Rasmus)
 - [Reimplement postgres (materialized) views in DuckDB] (Anders)
+- [Load depthmodel into the DuckDB Database] (Anders)
+- [Port extension to DuckDB] (Rasmus)
 
 # DONE
 - [Refactor postgres extension] (Rasmus)
@@ -63,3 +63,6 @@ This is based on a statistical probabilistic model.
 
 - Analyse usual behaviour for each vessel.
   - What is a normal reported draught.
+
+## Load depthmodel into the DuckDB Database
+Geodatastyrelsen has a depthmodel over the danish waters which we should have available in DuckDB
