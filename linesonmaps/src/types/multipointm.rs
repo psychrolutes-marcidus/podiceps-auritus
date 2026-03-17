@@ -4,8 +4,8 @@ use crate::types::linestringm::LineStringM;
 use crate::types::pointm::PointM;
 use geo_traits::{PointTrait, UnimplementedMultiLineString};
 use geo_traits::{
-    CoordTrait, GeometryTrait, LineStringTrait, MultiLineStringTrait, MultiPointTrait,
-    UnimplementedGeometryCollection, UnimplementedLine, UnimplementedMultiPoint,
+    CoordTrait, GeometryTrait, MultiPointTrait,
+    UnimplementedGeometryCollection, UnimplementedLine,
     UnimplementedMultiPolygon, UnimplementedPolygon, UnimplementedRect, UnimplementedTriangle,
 };
 
@@ -62,7 +62,8 @@ impl<const CRS: u64> TryFrom<wkb::reader::Wkb<'_>> for MultiPointM<CRS> {
     fn try_from(value: wkb::reader::Wkb<'_>) -> Result<Self, Self::Error> {
         match value.as_type() {
             geo_traits::GeometryType::MultiPoint(mp) => {
-                let mps = mp
+                
+                mp
                     .points()
                     .map(|p| {
                         Some(PointM::<CRS> {
@@ -74,9 +75,8 @@ impl<const CRS: u64> TryFrom<wkb::reader::Wkb<'_>> for MultiPointM<CRS> {
                         })
                     })
                     .collect::<Option<Vec<_>>>()
-                    .map(|mps| MultiPointM::from(mps))
-                    .ok_or(Error::Dimension);
-                mps
+                    .map(MultiPointM::from)
+                    .ok_or(Error::Dimension)
             }
             _ => Err(Error::IncompatibleType),
         }
@@ -109,7 +109,7 @@ impl<const CRS: u64> MultiPointTrait for MultiPointM<CRS> {
     }
 
     unsafe fn point_unchecked(&self, i: usize) -> Self::InnerPointType<'_> {
-        self.0[i].clone()
+        self.0[i]
     }
 }
 

@@ -53,12 +53,12 @@ impl<const CRS: u64> TryFrom<wkb::reader::Wkb<'_>> for PointM<CRS> {
         match value.as_type() {
             geo_traits::GeometryType::Point(p) => Ok(PointM {
                 coord: CoordM {
-                    x: p.coord().ok_or_else(|| Error::IncompatibleType)?.x(),
-                    y: p.coord().ok_or_else(|| Error::IncompatibleType)?.y(),
+                    x: p.coord().ok_or(Error::IncompatibleType)?.x(),
+                    y: p.coord().ok_or(Error::IncompatibleType)?.y(),
                     m: p.coord()
-                        .ok_or_else(|| Error::IncompatibleType)?
+                        .ok_or(Error::IncompatibleType)?
                         .nth(2)
-                        .ok_or_else(|| Error::Dimension)?,
+                        .ok_or(Error::Dimension)?,
                 },
             }),
             _ => Err(super::error::Error::IncompatibleType),
