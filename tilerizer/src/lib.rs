@@ -26,8 +26,16 @@ pub struct FilterTile(pub i32, pub i32, pub i32);
 impl Zoom for PointWZ {
     fn change_zoom(self, zoom_level: i32) -> Self {
         let change = self.z - zoom_level;
-        let x = self.point.x / 2_i32.pow(change.unsigned_abs());
-        let y = self.point.y / 2_i32.pow(change.unsigned_abs());
+ let x;
+        let y;
+
+        if change > 0 {
+            x = self.point.x / 2_i32.pow(change.unsigned_abs());
+            y = self.point.y / 2_i32.pow(change.unsigned_abs());
+        } else {
+            x = self.point.x * 2_i32.pow(change.unsigned_abs());
+            y = self.point.y * 2_i32.pow(change.unsigned_abs());
+        }
 
         Self {
             point: Point { x, y },
