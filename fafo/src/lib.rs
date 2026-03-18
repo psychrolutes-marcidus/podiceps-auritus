@@ -108,7 +108,7 @@ impl ErrorMeasurementConf {
         let f = Point::new(f.coord.x, f.coord.y);
         let s = Point::new(s.coord.x, s.coord.y);
         let l = Line::new(f, s);
-        let poly = util::point_to_polygon(*gp);
+        let poly = util::cell_to_polygon(*gp);
         let mat = poly.relate(&l);
         let length = match mat.is_covers() {
             true => util::line_contained_in_polygon(&l, &poly),
@@ -419,7 +419,7 @@ mod test {
         let c = xyzcell::Cell { coord: gp, z: 10 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-        let polygon = util::point_to_polygon(c);
+        let polygon = util::cell_to_polygon(c);
         // dbg!(polygon);
         // assert!(false);
     }
@@ -431,9 +431,9 @@ mod test {
         let c = xyzcell::Cell { coord: gp, z: 10 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-        let polygon = util::point_to_polygon(c);
+        let polygon = util::cell_to_polygon(c);
 
-        let sub_poly = util::point_to_polygon(xyzcell::Cell {
+        let sub_poly = util::cell_to_polygon(xyzcell::Cell {
             coord: GPoint {
                 x: gp.x * 2,
                 y: gp.y * 2,
@@ -457,9 +457,9 @@ mod test {
         let c = xyzcell::Cell { coord: gp, z: 21 }; // quadkey = 0000003030
 
         // testing in postgis seems to suggest that the difference in area is around 1E-6 square meters (at z=10)
-        let polygon = util::point_to_polygon(c);
+        let polygon = util::cell_to_polygon(c);
 
-        let sub_poly = util::point_to_polygon(xyzcell::Cell {
+        let sub_poly = util::cell_to_polygon(xyzcell::Cell {
             coord: GPoint {
                 x: gp.x * 2,
                 y: gp.y * 2,

@@ -10,12 +10,9 @@ use std::f64;
 
 use super::CellWithError;
 
-
-
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lon_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
     // seems to be close enough (not perfectly consistent with PostGIS)
-    //TODO: might be incorrect since the original formula finds the nort-westernmost point
     let lon = ((0.5 + gp.coord.x as f64) / (2_f64.powi(gp.z as i32))) * 360_f64 - 180_f64;
     let lat = (f64::consts::PI
         - ((0.5 + gp.coord.y as f64) / 2_f64.powi(gp.z as i32) * 2_f64 * f64::consts::PI))
@@ -94,7 +91,7 @@ pub(crate) fn line_contained_in_polygon(l: &Line, _p: &Polygon) -> f64 {
     l.length(&Geodesic)
 }
 
-pub(crate) fn point_to_polygon(c: xyzcell::Cell) -> Polygon {
+pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     let lon = ((0.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
     let lon_1 = ((1.0 + c.coord.x as f64) / (2_f64.powi(c.z as i32))) * 360_f64 - 180_f64;
 
@@ -115,10 +112,9 @@ pub(crate) fn point_to_polygon(c: xyzcell::Cell) -> Polygon {
         (lon_1, lat),
         (lon_1, lat_1),
         (lon, lat_1), /* remember to close the polygon */
-    ]); // TODO: ensure polygon is wound correctly // RE: seems to winding same as postgis now
+    ]);
 
     let poly = Polygon::new(ps, vec![]);
-    //TODO: ensure this polygon is atleast somewhat consistent with postGIS
 
     poly
 }
