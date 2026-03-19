@@ -1,13 +1,14 @@
 use std::{error::Error, ffi::c_int, sync::atomic::AtomicBool};
 
+use duckdb::ffi::duckdb_register_aggregate_function;
 use duckdb::{
+    Connection,
     core::{Inserter, LogicalTypeHandle, LogicalTypeId},
     duckdb_entrypoint_c_api,
     vtab::VTab,
-    Connection,
 };
 
-// pub mod etl;
+pub mod etl;
 
 const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -68,7 +69,8 @@ impl VTab for HelloVTab {
     }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn ferruginous_init_c_api() {
-    println!("Hello");
+#[duckdb_entrypoint_c_api(ext_name = "ferruginous")]
+pub fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
+    etl::extension_entrypoint(&con)?;
+    Ok(())
 }
