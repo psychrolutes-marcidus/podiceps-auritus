@@ -1,4 +1,5 @@
 use crate::xyzcell;
+use geo::Covers;
 use geo::{
     Contains, Coord, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
@@ -49,12 +50,22 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
 pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     let (f, s) = l.points();
 
-    let a = [(f, p.contains(&f)), (s, p.contains(&s))]
+    let point_that_are_covered = [(f, p.covers(&f)), (s, p.covers(&s))]
         .into_iter()
         .filter(|(_, b)| *b)
-        .map(|(q, _)| q)
+        .map(|(q, _)| q);
+    let c = point_that_are_covered.clone();
+    let a = point_that_are_covered
+        .take(1)
         .next()
         .expect("atleast 1 point should be within the polygon");
+    assert_eq!(
+        c.count(),
+        1,
+        "this function only works when one endpoint is covered by the input polygon"
+    );
+    // .next()
+    // .expect("atleast 1 point should be within the polygon");
 
     let lsr = p.exterior().lines();
 
@@ -78,7 +89,7 @@ pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
         .next()
         .expect("should have exactly 1 intersecting point");
 
-    assert!(a != intersection.into());
+    // assert_ne!(a, intersection.into());
     Geodesic.distance(a, intersection.into())
 }
 
