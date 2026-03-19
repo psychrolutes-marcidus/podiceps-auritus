@@ -122,3 +122,18 @@ pub(crate) fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
 ) -> f64 {
     Geodesic.distance(grid_centroid_to_lon_lat(*gp, gp.z as u8), p.into())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use geo::coord;
+    use geo::geometry::Rect;
+    #[test]
+    fn line_one_point_in_polygon_works() {
+        let corner = coord! {x:10.,y:20.};
+        let p = Rect::new(corner, coord! {x:30.,y:10.}).to_polygon();
+        assert_eq!(p.exterior().lines().count(), 4);
+        let l = Line::new(coord! {x:10.,y:30.}, corner); // line with startpoint outside polygon and endpoint in polygon corner
+        let length = line_one_point_in_polygon(&l, &p);
+    }
+}
