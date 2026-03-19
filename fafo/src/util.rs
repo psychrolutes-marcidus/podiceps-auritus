@@ -119,7 +119,7 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     poly
 }
 
-pub(crate) fn ground_truth_to_cell_geodesic<P: Into<Point<f64>>>(
+pub(crate) fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
     p: P,
     gp: &xyzcell::Cell,
     _zoom: u8,

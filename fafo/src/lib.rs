@@ -145,8 +145,8 @@ impl ErrorMeasurementConf {
                 }
             }
             ErrorMeasurementMethod::Geodesic => {
-                let first = util::ground_truth_to_cell_geodesic(f, gp, self.zoom);
-                let second = util::ground_truth_to_cell_geodesic(s, gp, self.zoom);
+                let first = util::ground_truth_to_cell_centroid_geodesic(f, gp, self.zoom);
+                let second = util::ground_truth_to_cell_centroid_geodesic(s, gp, self.zoom);
                 let min = first.min(second);
                 (*gp, min)
             }
@@ -179,7 +179,7 @@ impl ErrorMeasurementConf {
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                .map(|p| util::ground_truth_to_cell_geodesic(p, &gp, self.zoom))
+                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, &gp, self.zoom))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
