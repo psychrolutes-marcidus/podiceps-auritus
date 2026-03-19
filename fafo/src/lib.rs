@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::f64;
 
-use geo::{Contains, GeoNum, Intersects, Line, Point, Relate};
+use geo::{Covers, GeoNum, Intersects, Line, Point, Relate};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
@@ -115,7 +115,7 @@ impl ErrorMeasurementConf {
             false => {
                 if mat.is_disjoint() {
                     0_f64
-                } else if poly.contains(&f) || poly.contains(&s) {
+                } else if poly.covers(&f) || poly.covers(&s) {
                     util::line_one_point_in_polygon(&l, &poly)
                 } else {
                     util::line_no_end_point_in_polygon(&l, &poly)
