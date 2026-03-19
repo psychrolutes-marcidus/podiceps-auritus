@@ -1,14 +1,9 @@
+use crate::xyzcell;
 use geo::{
     Contains, Coord, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
 };
-
-use crate::xyzcell;
-
-use std::collections::HashMap;
 use std::f64;
-
-use super::CellWithError;
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 pub fn grid_centroid_to_lon_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
@@ -26,7 +21,7 @@ pub fn grid_centroid_to_lon_lat(gp: xyzcell::Cell, _zoom: u8) -> Point<f64> {
 pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     let ls = p.exterior().lines();
     let intersections = ls
-        .filter_map(|pl| line_intersection(*l, pl)) // this contains 2 single point intersections OR one collinear intersection
+        .filter_map(|pl| line_intersection(*l, pl)) // this contains 2 single point intersections XOR 1 collinear intersection
         .map(|i| match i {
             LineIntersection::Collinear { intersection } => {
                 vec![intersection.start, intersection.end]
@@ -48,9 +43,9 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     );
 
     Geodesic.distance(intersections[0].into(), intersections[1].into())
-    // todo!()
 }
 
+/// when either of the endpoints are within the polygon
 pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     let (f, s) = l.points();
 
@@ -87,6 +82,7 @@ pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     Geodesic.distance(a, intersection.into())
 }
 
+/// When entire line is contained within polygon
 pub(crate) fn line_contained_in_polygon(l: &Line, _p: &Polygon) -> f64 {
     l.length(&Geodesic)
 }
