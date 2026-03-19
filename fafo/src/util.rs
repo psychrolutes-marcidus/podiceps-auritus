@@ -146,6 +146,6 @@ mod tests {
         let p = Rect::new(corner, coord! {x:30.,y:10.}).to_polygon();
         assert_eq!(p.exterior().lines().count(), 4);
         let l = Line::new(coord! {x:10.,y:30.}, corner); // line with startpoint outside polygon and endpoint in polygon corner
-        let length = line_one_point_in_polygon(&l, &p);
+        let _length = line_one_point_in_polygon(&l, &p); // ensures that assertion is not violated
     }
 }
