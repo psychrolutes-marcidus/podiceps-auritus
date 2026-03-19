@@ -37,7 +37,7 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
         .flatten()
         .take(2)
         .collect::<Vec<_>>();
-    debug_assert_eq!(
+    assert_eq!(
         intersections.len(),
         2,
         "function should only be called when there are 0 endpoints within the polygon"
@@ -94,7 +94,8 @@ pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
 }
 
 /// When entire line is contained within polygon
-pub(crate) fn line_contained_in_polygon(l: &Line, _p: &Polygon) -> f64 {
+pub(crate) fn line_contained_in_polygon(l: &Line, p: &Polygon) -> f64 {
+    assert!(p.covers(l), "line should be covered by polygon");
     l.length(&Geodesic)
 }
 
@@ -114,11 +115,11 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         * (180_f64 / f64::consts::PI);
 
     let ps = LineString::from(vec![
-        (lon, lat_1),
-        (lon, lat),
-        (lon_1, lat),
-        (lon_1, lat_1),
-        (lon, lat_1), /* remember to close the polygon */
+        (lon, lat_1),   // NW
+        (lon, lat),     // SW
+        (lon_1, lat),   //SE
+        (lon_1, lat_1), // NE
+        (lon, lat_1),   // NW /* remember to close the polygon */
     ]);
 
     let poly = Polygon::new(ps, vec![]);
