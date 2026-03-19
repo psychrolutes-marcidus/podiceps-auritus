@@ -117,7 +117,7 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     let ps = LineString::from(vec![
         (lon, lat_1),   // NW
         (lon, lat),     // SW
-        (lon_1, lat),   //SE
+        (lon_1, lat),   // SE
         (lon_1, lat_1), // NE
         (lon, lat_1),   // NW /* remember to close the polygon */
     ]);
