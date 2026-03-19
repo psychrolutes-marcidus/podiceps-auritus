@@ -1,7 +1,6 @@
 use crate::xyzcell;
-use geo::Covers;
 use geo::{
-    Contains, Coord, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
+    Coord, Covers, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
 };
 use std::f64;
@@ -50,12 +49,12 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
 pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     let (f, s) = l.points();
 
-    let point_that_are_covered = [(f, p.covers(&f)), (s, p.covers(&s))]
+    let points_that_are_covered = [(f, p.covers(&f)), (s, p.covers(&s))]
         .into_iter()
         .filter(|(_, b)| *b)
         .map(|(q, _)| q);
-    let c = point_that_are_covered.clone();
-    let a = point_that_are_covered
+    let c = points_that_are_covered.clone();
+    let a = points_that_are_covered
         .take(1)
         .next()
         .expect("atleast 1 point should be within the polygon");
@@ -64,8 +63,6 @@ pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
         1,
         "this function only works when one endpoint is covered by the input polygon"
     );
-    // .next()
-    // .expect("atleast 1 point should be within the polygon");
 
     let lsr = p.exterior().lines();
 
@@ -78,7 +75,7 @@ pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
                 is_proper: _,
             } => intersection,
             LineIntersection::Collinear { intersection } => {
-                // one of the endpoints is equal to the endpoin in the polygon
+                // one of the endpoints is equal to the endpoint in the polygon
                 if intersection.start != a.0 {
                     intersection.start
                 } else {
@@ -89,7 +86,6 @@ pub(crate) fn line_one_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
         .next()
         .expect("should have exactly 1 intersecting point");
 
-    // assert_ne!(a, intersection.into());
     Geodesic.distance(a, intersection.into())
 }
 
