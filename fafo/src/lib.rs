@@ -109,13 +109,14 @@ impl ErrorMeasurementConf {
         let s = Point::new(s.coord.x, s.coord.y);
         let l = Line::new(f, s);
         let poly = util::cell_to_polygon(*gp);
-        let mat = poly.relate(&l);
-        let length = match mat.is_covers() {
+        let mat_start = poly.relate(&f);
+        let mat_end = poly.relate(&s);
+        let length = match mat_start.is_covers() && mat_end.is_covers() /* if start and end is covered by p, then whole line must be covered as well */ {
             true => util::line_contained_in_polygon(&l, &poly),
             false => {
-                if mat.is_disjoint() {
+                if mat_start.is_disjoint() && mat_end.is_disjoint() {
                     0_f64
-                } else if poly.covers(&f) || poly.covers(&s) {
+                } else if mat_start.is_covers() || mat_end.is_covers() {
                     util::line_one_point_in_polygon(&l, &poly)
                 } else {
                     util::line_no_end_point_in_polygon(&l, &poly)
