@@ -133,9 +133,12 @@ pub(crate) fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
 
 #[cfg(test)]
 mod tests {
+    use crate::xyzcell::Cell;
+
     use super::*;
-    use geo::coord;
-    use geo::geometry::Rect;
+    use geo::{BooleanOps, Centroid, MultiPolygon};
+    use geo::{Relate, coord, geometry::Rect, point};
+    use tilerizer::Point;
     #[test]
     fn line_one_point_in_polygon_works() {
         let corner = coord! {x:10.,y:20.};
@@ -143,5 +146,49 @@ mod tests {
         assert_eq!(p.exterior().lines().count(), 4);
         let l = Line::new(coord! {x:10.,y:30.}, corner); // line with startpoint outside polygon and endpoint in polygon corner
         let _length = line_one_point_in_polygon(&l, &p); // ensures that assertion is not violated
+    }
+
+    #[test]
+    fn midpoint_in_atleast_1_polygon() {
+        // funky edge case, midpoint is the point between 4 grids in a 2x2 layout
+        let cells = [
+            Cell {
+                coord: Point { x: 533, y: 315 },
+                z: 10,
+            },
+            Cell {
+                coord: Point { x: 534, y: 315 },
+                z: 10,
+            },
+            Cell {
+                coord: Point { x: 533, y: 316 },
+                z: 10,
+            },
+            Cell {
+                coord: Point { x: 534, y: 316 },
+                z: 10,
+            },
+        ];
+        let a = cells.map(|c| cell_to_polygon(c));
+        let midpoint = point! {x:7.734375, y:56.75272287205735};
+        let de9im = a.clone().map(|p| p.relate(&midpoint).is_covers());
+
+        dbg!(de9im);
+        assert!(de9im.iter().filter(|p| **p).count() > 0); // it is in fact only covered by 2 of the 4 polygons (specifcally the upper 2)
+    }
+    #[test]
+    fn midpoint() {
+        let nw = Rect::new(coord! {x:0.,y:20.}, coord! {x:10.,y:10.});
+        let ne = Rect::new(coord! {x:10.,y:20.}, coord! {x:20.,y:10.});
+        let sw = Rect::new(coord! {x:0.,y:10.}, coord! {x:10.,y:0.});
+        let se = Rect::new(coord! {x:10.,y:10.}, coord! {x:20.,y:0.});
+        let super_rect = Rect::new(coord! {x:0.,y:20.}, coord! {x:20.,y:0.});
+        let mp = super_rect.centroid();
+
+        let a = [nw, ne, sw, se].map(|r| r.to_polygon());
+        let de_9im = a.clone().map(|p| p.relate(&mp));
+        dbg!(MultiPolygon::new(a.to_vec()));
+        dbg!(&de_9im);
+        assert!(de_9im.iter().all(|p|p.is_touches()));
     }
 }
