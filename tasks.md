@@ -1,11 +1,12 @@
 # TODO
 - [Combine cell probability with metadata]
 - [Calculate confidence for a cell given a vessel]
+- [Depth model as a Rust data structure]
 
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
-- [Load depthmodel into the DuckDB Database] (Anders)
+- [Load depthmodel into the DuckDB Database] (Andrzej)
 - [Port extension to DuckDB] (Rasmus)
 
 # DONE
@@ -15,7 +16,11 @@
 
 # Task Descriptions
 
-
+## Depth model as a Rust data structure
+It seems the entire depth model can be stored in memory at runtime.
+Create an appropiate rust type that represents this model with an API for reading the underlying data (e.g. query by coordinate).
+Consider wrapping this type in an rtree (might be difficult if data is stored as raster, idk)
+  - the `rstar` crate might be useful here
 
 ### changes over time
 - [x] Vessel type
