@@ -26,7 +26,7 @@ Create an appropiate rust type that represents this model with an API for readin
 If the depth model is converted to polygons (vector) in either EPSG:4326 or EPSG:3857, its size is rathe large (just shy of 3GB).
 So it should be saved as a table in DuckDB (with r-tree?).
 
-Some measurements have year = 0 (i.e. interoplation).
+Some measurements have year = 0 (i.e. interoplation, satellite or historical).
 
 ### query types
 
