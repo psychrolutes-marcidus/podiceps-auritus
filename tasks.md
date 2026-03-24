@@ -9,6 +9,7 @@
 - [Port extension to DuckDB] (Rasmus)
 
 # DONE
+- [Error metrics for non ground-truth cells] (Anders)
 - [Refactor postgres extension] (Rasmus)
 - [Reimplement postgres (materialized) views in DuckDB] (Rasmus and Anders)
 

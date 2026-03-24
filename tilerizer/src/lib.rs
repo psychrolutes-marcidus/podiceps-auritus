@@ -9,7 +9,7 @@ use crate::tile3d::draw_line_triangle;
 
 pub mod tile3d;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
@@ -44,7 +44,7 @@ impl Zoom for PointWZ {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone,Hash)]
 pub struct PointWTime {
     pub point: Point,
     pub z: i32,
