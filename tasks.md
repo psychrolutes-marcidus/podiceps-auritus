@@ -33,7 +33,7 @@ Some measurements have year = 0 (i.e. interoplation, satellite or historical).
 - look up measurements by a given quadkey (might result in several measurements)
   - at z=21 it may yield up to 4 measurements
   - at z<19 it can yield even more
-  - should yield area between DDM polygon ∪ MVT polygon + (depth,source,year)
+  - should yield area between DDM polygon ∩ MVT polygon + (depth,source,year)
 
 ### changes over time
 
