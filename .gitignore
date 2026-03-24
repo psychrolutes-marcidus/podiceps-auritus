@@ -91,4 +91,9 @@ Cargo.lock
 .env
 segment_experiment/*.csv
 segment_experiment/*.txt
-test_db.db
+
+*.pq
+*.db
+*.vortex
+
+ferruginous/configure

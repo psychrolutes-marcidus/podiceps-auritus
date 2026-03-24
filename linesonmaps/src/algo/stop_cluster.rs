@@ -1,11 +1,7 @@
 use chrono::{DateTime, TimeDelta, Utc};
 use geo::ConvexHull;
-use geo::Distance;
 // use itertools::*;
 use itertools::Itertools;
-use rayon::prelude::*;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::num::NonZero;
 use typed_builder::TypedBuilder;
 
@@ -20,15 +16,6 @@ pub enum Classification {
     Edge(usize),
     Noise,
     Unclassified,
-}
-
-impl Classification {
-    fn cluster(&self) -> Option<usize> {
-        match self {
-            &Classification::Core(c) | &Classification::Edge(c) => Some(c),
-            _ => None,
-        }
-    }
 }
 
 #[derive(TypedBuilder, Debug)]
@@ -134,7 +121,7 @@ where
         dist_thres: f64,
     ) -> Vec<usize> {
         // if qp is points[i], and points[n] is not a neighbor, then points[n-1] cannot be as well, same for points[m] and points[m+1] with n<i<m
-        let mut neighbors = points // linestrings are ordered, so 'neighbors' will only be subslice of points
+        let neighbors = points // linestrings are ordered, so 'neighbors' will only be subslice of points
             .iter()
             .enumerate()
             .skip(idx - 1)
@@ -186,21 +173,15 @@ pub fn cluster_to_traj_with_stop_object<const CRS: u64>(
     Trajectory(
         classes
             .chunk_by(|(_, a), (_, b)| match a {
-                C::Core(c) | C::Edge(c) => match b {
-                    C::Core(cc) | C::Edge(cc) if c == cc => true,
-                    _ => false,
-                },
-                C::Noise | C::Unclassified => match b {
-                    C::Noise | C::Unclassified => true,
-                    _ => false,
-                },
+                C::Core(c) | C::Edge(c) => matches!(b, C::Core(cc) | C::Edge(cc) if c == cc),
+                C::Noise | C::Unclassified => matches!(b, C::Noise | C::Unclassified),
                 // _ => true, //FIXME: inverse of previous match arm
             })
             .map(|c| {
                 if matches!(c.first(), Some((_, C::Core(_))) | Some((_, C::Edge(_)))) {
                     let time_start = DateTime::from_timestamp_secs(
                         c.iter()
-                            .map(|(p, c)| p)
+                            .map(|(p, _c)| p)
                             .min_by(|a, b| a.coord.m.total_cmp(&b.coord.m))
                             .expect("classes should be nonempty")
                             .coord
@@ -209,7 +190,7 @@ pub fn cluster_to_traj_with_stop_object<const CRS: u64>(
                     .expect("timestamp should be well within bounds");
                     let time_end = DateTime::from_timestamp_secs(
                         c.iter()
-                            .map(|(p, c)| p)
+                            .map(|(p, _c)| p)
                             .max_by(|a, b| a.coord.m.total_cmp(&b.coord.m))
                             .expect("classes should be nonempty")
                             .coord
@@ -218,7 +199,8 @@ pub fn cluster_to_traj_with_stop_object<const CRS: u64>(
                     .expect("timestamp should be well within bounds");
 
                     let a = geo::LineString::from_iter(
-                        c.iter().map(|(p, c)| geo::Point::new(p.coord.x, p.coord.y)),
+                        c.iter()
+                            .map(|(p, _c)| geo::Point::new(p.coord.x, p.coord.y)),
                     )
                     .convex_hull();
 
@@ -228,7 +210,7 @@ pub fn cluster_to_traj_with_stop_object<const CRS: u64>(
                     }
                 } else {
                     StopOrLs::LS(
-                        LineStringM::<CRS>::new(c.iter().map(|(p, c)| p.coord).collect_vec())
+                        LineStringM::<CRS>::new(c.iter().map(|(p, _c)| p.coord).collect_vec())
                             .unwrap_or_else(|| LineStringM(vec![])),
                     )
                 }
@@ -240,9 +222,7 @@ pub fn cluster_to_traj_with_stop_object<const CRS: u64>(
 pub fn triangulate_stop_object(
     polygon: &geo::Polygon,
 ) -> Result<Vec<geo::Triangle>, geo::triangulate_delaunay::TriangulationError> {
-    let t =
-        geo::algorithm::TriangulateDelaunay::constrained_triangulation(polygon, Default::default());
-    t
+    geo::algorithm::TriangulateDelaunay::constrained_triangulation(polygon, Default::default())
 }
 
 #[cfg(test)]
@@ -445,7 +425,13 @@ pub mod test {
         let _ = wkb::writer::write_multi_polygon(&mut w, &mp, &opt).unwrap();
         let hex = hex::encode(w);
         std::fs::write("aarhus_odden_stops.txt", hex).unwrap();
-        dbg!(mp.0.iter().min_by_key(|x| x.exterior().num_coords()).unwrap().exterior().num_coords());
+        dbg!(
+            mp.0.iter()
+                .min_by_key(|x| x.exterior().num_coords())
+                .unwrap()
+                .exterior()
+                .num_coords()
+        );
         assert_eq!(stops.len(), 0)
     }
 }

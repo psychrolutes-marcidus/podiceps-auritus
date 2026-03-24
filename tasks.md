@@ -1,29 +1,33 @@
 # TODO
-- [Model linestrings as splines]
-- [Model 2D vessels as splines]
-- [2D vessel rotation]
-- [Compression of vessel trajectories]
-- [Git Hooks pre-commit]
 - [Combine cell probability with metadata]
-- [Foreign tables in postgres dev environment]
+- [Calculate confidence for a cell given a vessel]
 
 # DOING
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
+- [Load depthmodel into the DuckDB Database] (Anders)
+- [Port extension to DuckDB] (Rasmus)
 
 # DONE
 - [Error metrics for non ground-truth cells] (Anders)
 - [Refactor postgres extension] (Rasmus)
+- [Reimplement postgres (materialized) views in DuckDB] (Rasmus and Anders)
 
 # Task Descriptions
+
+
+
+### changes over time
+- [x] Vessel type
+- [x] transponder type ?
+- [x] vessel dimensions (over time)
+- [x] vessel offset values (i.e. a,b,c,d)
 
 ## Refactor postgres extension
 The postgres extension functions in tileheater are somewhat linked to some of the algorithmic work.
 Therefore, the algorithmic part of it should be refactored out such that it is easier to test the code outside of the postgres database.
 The extension should only handle convertion from WKB to internal geospatial types.
 
-## Model linestrings as splines
-Linestrings should be rendered as splines in order to emulate more accurate vessel movement.
 
 ## Distance to AIS point error
 We want to measure distance between the sampled cell and the nearest AIS point in order to measures some form of error.
@@ -34,25 +38,11 @@ Please expand further.
   - From <center of cell,  probe point, probe point projected onto line> to <AIS point, center of AIS cell>?
     -  Center of cell to <center of AIS cell/AIS point> 'feels' the most 'correct'
 
-## Model 2D vessels as splines
-Once a linestring can be interpreted as a spline it should be straight forward to convert this into continous lines.
-
-## 2D vessel rotation
-A vessel can rotate in its path from one point to another.
-The spline can interprete the larger movements, however, if a vessel reports dimensions (a,b,c,d) then the edges of the vessel will move differently from the spline and cover different areas.
-Therefore, independent rotation around a vessels GPS position is necessary in order to emulate this behaviour.
-
-## Compression of vessel trajectories
-This task depend on [Model linestrings as splines] to be implemented.
-
-Given a trajectory can be represented as a spline, is it possible to evict an AIS point given that we can interpolate that AIS point, with an error rate by it neighbors.
 
 ## Test suite for proving results
 A test suite that can compare the different outputs of renderes correctly.
 We should use regression test for this.
 
-## Git Hooks pre-commit
-To avoid pushing code that will not work or ruin the results in our regression tests, we should have a git hook that runs the tests locally on the machine and verify that everything is working before a commit.
 
 ## Combine cell probability with metadata
 Multiple vessels will run through the same cell multiple times.
@@ -60,7 +50,20 @@ Therefore, we should be able to determine a depth from these multiple vessels wi
 
 There might be statistical approaches on how to do this while being able to report a confidence score.
 
-## Foreign tables in postgres dev environment
-We want to load even more data into the database.
-However, it is not possible for us to store all that data on our dev machines.
-Therefore, we should utilise foreign table in postgres to access data on the development server and then use that data together with the developed extension on our local machine.
+
+## Port extension to DuckDB
+Depending on: [Implement missing spatial operations in DuckDB]
+Remove this task at completion: [Foreign tables in postgres dev environment]
+
+Ditch Postgres and port the extension to DuckDB.
+It minimize the amount of macros and allow us to work with C types instead of having to serialize which PGRX requires.
+
+## Calculate confidence for a cell given a vessel
+The system should, as per iteration 2, be able to give a confidence score of how likely a vessel draught is possible to do in a given area.
+This is based on a statistical probabilistic model.
+
+- Analyse usual behaviour for each vessel.
+  - What is a normal reported draught.
+
+## Load depthmodel into the DuckDB Database
+Geodatastyrelsen has a depthmodel over the danish waters which we should have available in DuckDB
