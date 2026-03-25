@@ -86,7 +86,7 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
              ",
     )?;
 
-    let something = point_pre.query_map([], |row| {
+    let ais_points_row = point_pre.query_map([], |row| {
         Ok(row
             .get(0)
             .ok()
@@ -96,17 +96,17 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
             .map(|(((a, b), c), d)| (a, b, c, d)))
     })?;
 
-    let mut x = Vec::new();
-    for e in something {
-        match e? {
-            Some(el) => x.push(el),
+    let mut ais_points = Vec::new();
+    for point in ais_points_row {
+        match point? {
+            Some(el) => ais_points.push(el),
             None => {}
         }
     }
 
     let func = |f, l| dist(f, l, 1000_f64) && time_dist(f, l, 60_f64);
 
-    let segments: Vec<_> = x
+    let segments: Vec<_> = ais_points
         .par_chunk_by(|a, b| a.0 == b.0)
         .map(|x| row_to_line(x))
         .flatten()
