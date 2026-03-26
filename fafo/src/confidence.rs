@@ -3,9 +3,13 @@ use std::ops::RangeInclusive;
 pub type ConfidenceInterval = RangeInclusive<f64>;
 pub type Draught = f64;
 
+pub fn score_deviation(draught: Draught, confidence: &ConfidenceInterval) -> f64 {
+    square_error(draught_deviation_from_confidence(draught, confidence))
+}
+
 const fn draught_deviation_from_confidence(
     draught: Draught,
-    confidence: ConfidenceInterval,
+    confidence: &ConfidenceInterval,
 ) -> f64 {
     match *confidence.start() <= draught && draught <= *confidence.end() {
         true => 0_f64,
@@ -20,6 +24,10 @@ const fn draught_deviation_from_confidence(
             closest
         }
     }
+}
+
+fn square_error(score: f64) -> f64 {
+    score.powi(2)
 }
 
 #[cfg(test)]
