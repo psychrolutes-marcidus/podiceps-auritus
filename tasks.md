@@ -1,11 +1,11 @@
 # TODO
-
 - [Combine cell probability with metadata]
 - [Calculate confidence for a cell given a vessel]
 - [Depth model as a Rust data structure]
 
 # DOING
 
+- [Confidence interval for draught measurements] (Anders)
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
 - [Load depthmodel into the DuckDB Database] (Andrzej)
