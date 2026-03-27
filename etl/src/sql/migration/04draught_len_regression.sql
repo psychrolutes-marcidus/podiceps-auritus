@@ -1,3 +1,4 @@
+-- formula borrowed from https://ryxcommar.com/2022/09/15/multiple-linear-regression-in-sql-with-only-sum-and-avg/
 WITH
     av AS (
         SELECT
@@ -60,40 +61,3 @@ WHERE
     AND lat != 91
     AND transponder_type = 'class a'
     AND is_valid_mmsi;
-
---\csv
-WITH
-    base AS (
-        SELECT
-            draught::decimal(10, 1) AS draught_y,
-            draught::decimal(10, 1) - AVG(draught::decimal(10, 1)) over () AS draught_y_centered,
-            ship_length::decimal(10, 1) AS ship_length_x1,
-            ship_length::decimal(10, 1) - AVG(ship_length::decimal(10, 1)) AS ship_length_x1_centered
-        FROM
-            main.ais_data
-        WHERE
-            ship_length IS NOT NULL
-            AND draught IS NOT NULL
-    ),
-    regress AS (
-        SELECT
-            AVG(draught_y) - avg(ship_lenght_x1) * SUM(draught_y_centered * ship_length_x1_centered) / sum(ship_length_x1_centered * ship_length_x1_centered) AS const_coef,
-            SUM(draught_y_centered * ship_length_x1_centered) / SUM(ship_length_x1_centered, ship_length_x1_centered) AS x1_coef
-        FROM
-            base
-    )
-SELECT
-    *
-FROM
-    regress;
-
-SELECT
-    draught::decimal(10, 1) AS draught_y,
-    draught::decimal(10, 1) - AVG(draught::decimal(10, 1)) over () AS draught_y_centered,
-    ship_length::decimal(10, 1) AS ship_length_x1,
-    ship_length::decimal(10, 1) - AVG(ship_length::decimal(10, 1)) AS ship_length_x1_centered
-FROM
-    main.ais_data
-WHERE
-    ship_length IS NOT NULL
-    AND draught IS NOT NULL;
