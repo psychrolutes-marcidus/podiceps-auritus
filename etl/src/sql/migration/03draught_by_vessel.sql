@@ -1,4 +1,3 @@
--- PIVOT ais_data ON ship_type USING avg(draught);
 CREATE OR REPLACE VIEW vessel_attributes.draught_nulls_by_ship_type AS (
     SELECT
         ship_type,
