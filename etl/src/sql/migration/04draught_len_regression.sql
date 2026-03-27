@@ -42,7 +42,24 @@ COPY (
     WHERE
         draught IS NOT NULL
         AND ship_length IS NOT NULL
+        AND lon != 91
+        AND lat != 91
+    USING SAMPLE
+        1_000_000
 ) TO 'draught_len.csv';
+
+SELECT
+    draught,
+    ship_length
+FROM
+    main.ais_data
+WHERE
+    draught IS NOT NULL
+    AND ship_length IS NOT NULL
+    AND lon != 91
+    AND lat != 91
+    AND transponder_type = 'class a'
+    AND is_valid_mmsi;
 
 --\csv
 WITH
