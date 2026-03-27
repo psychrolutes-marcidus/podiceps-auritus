@@ -7,6 +7,7 @@ use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
 pub mod util;
 pub mod xyzcell;
+pub mod confidence;
 
 pub type CellWithError = (xyzcell::Cell, f64);
 

@@ -9,7 +9,7 @@ CREATE TABLE file_store (PATH TEXT);
 CREATE OR REPLACE VIEW ais_data AS
     (SELECT *
      FROM read_parquet('etl/src/sql/schema.parquet')
-     WHERE lat != 91); -- This is a placeholder view. It will be replace by the correct view once data is loaded.
+     WHERE lat <> 91); -- This is a placeholder view. It will be replace by the correct view once data is loaded.
 
 CREATE OR REPLACE VIEW ais_point AS
     (SELECT mmsi, timestamp, lat,

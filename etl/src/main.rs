@@ -44,9 +44,8 @@ fn main() {
             let _conn = create_db(&path).unwrap();
         }
         Args::UpdateDatabase(update) => {
-            let conn = duckdb::Connection::open(update.db_path).unwrap();
             let path = Path::new(&update.import_file);
-            update_db(&conn, path).unwrap();
+            update_db(&update.db_path, path).unwrap();
         }
     }
 }
