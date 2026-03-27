@@ -2,6 +2,7 @@ use std::ops::{Div, Sub};
 
 use nalgebra::{matrix, vector};
 
+#[derive(Debug, Clone, Copy)]
 pub struct MinmaxBounds<T>
 where
     T: PartialOrd,
@@ -81,7 +82,7 @@ mod tests {
         let result = result_source * vec[0] + result_age * vec[1];
         dbg!(&result);
 
-        let vec = judweight_vessel();
+        // let vec = judweight_vessel();
         dbg!(&vec);
 
         assert!(false);

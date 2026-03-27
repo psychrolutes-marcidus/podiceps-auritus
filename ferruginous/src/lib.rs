@@ -10,8 +10,6 @@ use duckdb::{
     vtab::VTab,
 };
 
-pub mod etl;
-
 const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
 
 #[repr(C)]

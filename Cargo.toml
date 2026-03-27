@@ -40,3 +40,4 @@ clap = { version = "4.5.60", features = ["derive"] }
 thiserror = "2.0.18"
 nalgebra = "0.34.1"
 geo = "0.31.0"
+algorithms = { path = "algorithms" }
