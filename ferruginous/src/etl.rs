@@ -14,9 +14,6 @@ pub fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[no_mangle]
-pub extern "C" fn aggr_function(_data: u8) {}
-
 #[repr(C)]
 struct StateExtractDraught {
     len: usize,
@@ -47,6 +44,40 @@ impl VScalar for ExtractDraught {
         vec![ScalarFunctionSignature::exact(
             vec![LogicalTypeHandle::from(LogicalTypeId::Integer)],
             LogicalTypeHandle::from(LogicalTypeId::Integer),
+        )]
+    }
+}
+
+struct StateDDMReliability {
+    len: usize,
+}
+
+struct DDMReliability;
+
+impl VScalar for DDMReliability {
+    type State = StateDDMReliability;
+
+    unsafe fn invoke(
+        _state: &Self::State,
+        input: &mut duckdb::core::DataChunkHandle,
+        _output: &mut dyn duckdb::vtab::arrow::WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let source = input.flat_vector(0);
+        let year = input.flat_vector(1);
+
+        let slice_source: &[u8] = source.as_slice();
+        let slice_year: &[u32] = year.as_slice();
+
+        todo!()
+    }
+
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![
+                LogicalTypeHandle::from(LogicalTypeId::UTinyint),
+                LogicalTypeHandle::from(LogicalTypeId::UInteger),
+            ],
+            LogicalTypeHandle::from(LogicalTypeId::Float),
         )]
     }
 }

@@ -1,3 +1,5 @@
+pub mod etl;
+
 use std::{error::Error, ffi::c_int, sync::atomic::AtomicBool};
 
 use duckdb::{
