@@ -32,6 +32,37 @@ SELECT
 FROM
     regress;
 
+-- TODO: use regr_slope instead, it might do the same
+SELECT
+    REGR_SLOPE(draught, ship_length) AS slope,
+    REGR_INTERCEPT(draught, ship_length) AS intercept,
+    REGR_R2(draught, ship_length) AS r_squared
+FROM
+    main.ais_data
+WHERE
+    draught IS NOT NULL
+    AND ship_length IS NOT NULL
+    AND lon != 91
+    AND lat != 91;
+
+SELECT DISTINCT
+    ais_nav_status
+FROM
+    vessel_attributes.nav_status;
+
+SELECT
+    -- vt.mmsi,
+    vt.ship_type,
+    REGR_SLOPE(d.draught, sd.to_bow + sd.to_stern)
+FROM
+    vessel_attributes.vessel_type AS vt
+    JOIN vessel_attributes.dimensions sd ON vt.mmsi = sd.mmsi
+    AND vt.timestamp = vt.timestamp
+    JOIN vessel_attributes.draught d ON vt.mmsi = d.mmsi
+    AND vt.timestamp = d.timestamp
+GROUP BY
+    vt.ship_type limit 10;
+
 --\nyt forsøg
 -- csv
 COPY (
