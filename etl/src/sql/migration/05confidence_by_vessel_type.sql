@@ -1,4 +1,4 @@
-Begin;
+BEGIN;
 
 CREATE OR REPLACE VIEW main.confidence_by_vessel AS (
     SELECT
