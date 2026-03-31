@@ -1,5 +1,3 @@
-Begin;
-
 -- might be bad if the underlying vessel changes, but MMSI does not.
 CREATE OR REPLACE VIEW main.confidence_by_mmsi AS (
     SELECT
@@ -16,5 +14,3 @@ CREATE OR REPLACE VIEW main.confidence_by_mmsi AS (
     ORDER BY
         ma - mi DESC
 );
-
-COMMIT;
