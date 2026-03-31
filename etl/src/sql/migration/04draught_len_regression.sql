@@ -13,8 +13,7 @@ CREATE OR REPLACE VIEW vessel_stats.linear_regression AS (
     FROM
         main.ais_data
     WHERE
-        lon != 91
-        AND lat != 91 -- REGR_{SLOPE | INTERCEPT | R2} ignore null values
+        lat != 91 -- REGR_{SLOPE | INTERCEPT | R2} ignore null values
     GROUP BY
         ship_type
 );
