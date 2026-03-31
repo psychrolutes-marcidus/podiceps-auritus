@@ -1,4 +1,4 @@
-begin;
+BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS vessel_stats;
 
