@@ -1,5 +1,3 @@
-Begin;
-
 CREATE OR REPLACE VIEW main.confidence_by_vessel AS (
     SELECT
         ship_type,
@@ -13,5 +11,3 @@ CREATE OR REPLACE VIEW main.confidence_by_vessel AS (
     GROUP BY
         ship_type
 );
-
-COMMIT;
