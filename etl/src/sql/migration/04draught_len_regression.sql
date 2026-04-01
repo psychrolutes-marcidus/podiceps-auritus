@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE SCHEMA IF NOT EXISTS vessel_stats;
 
 CREATE OR REPLACE VIEW vessel_stats.linear_regression AS (
@@ -17,5 +15,3 @@ CREATE OR REPLACE VIEW vessel_stats.linear_regression AS (
     GROUP BY
         ship_type
 );
-
-COMMIT;
