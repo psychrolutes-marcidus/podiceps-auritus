@@ -96,5 +96,6 @@ segment_experiment/*.txt
 *.db
 *.wal
 *.vortex
-
+*.csv
+*.tmp
 ferruginous/configure
