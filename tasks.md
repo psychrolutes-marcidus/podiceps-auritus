@@ -5,7 +5,6 @@
 
 # DOING
 
-- [Confidence interval for draught measurements] (Anders)
 - [Test suite for proving results] (Anders)
 - [Distance to AIS point error] (Andrzej)
 - [Load depthmodel into the DuckDB Database] (Andrzej)
@@ -13,6 +12,9 @@
 
 # DONE
 
+- [Linear regression model for each ship type] (Anders)
+- [Draught null frequency for each MMSI] (Anders)
+- [Confidence interval for draught measurements] (Anders)
 - [Error metrics for non ground-truth cells] (Anders)
 - [Refactor postgres extension] (Rasmus)
 - [Reimplement postgres (materialized) views in DuckDB] (Rasmus and Anders)
@@ -22,8 +24,8 @@
 ## Depth model as a Rust data structure
 
 It seems the entire depth model can be stored in memory at runtime.
-Create an appropiate rust type that represents this model with an API for reading the underlying data (e.g. query by coordinate).
-If the depth model is converted to polygons (vector) in either EPSG:4326 or EPSG:3857, its size is rathe large (just shy of 3GB).
+Create an appropriate rust type that represents this model with an API for reading the underlying data (e.g. query by coordinate).
+If the depth model is converted to polygons (vector) in either EPSG:4326 or EPSG:3857, its size is rather large (just shy of 3GB).
 So it should be saved as a table in DuckDB (with r-tree?).
 
 Some measurements have year = 0 (i.e. interoplation, satellite or historical).
