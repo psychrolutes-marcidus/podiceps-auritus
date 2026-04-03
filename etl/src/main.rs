@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    backtrace::Backtrace,
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
 
 use clap::Parser;

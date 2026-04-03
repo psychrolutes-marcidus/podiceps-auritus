@@ -55,11 +55,17 @@ pub fn update_trajectories(tx: &Transaction, path: &Path) -> Result<(), Database
 
     let query = format!(
         "
+                    CREATE OR REPLACE TEMP TABLE distinct_new_mmsi AS (
+                        SELECT DISTINCT mmsi
+                        FROM read_parquet('{path_str}')
+                    );
+
                     CREATE OR REPLACE TEMP VIEW newest_message_with_pq AS (
                         SELECT DISTINCT ON (mmsi) mmsi, time_begin
                         FROM
                         (SELECT *
                         FROM newest_message
+                        WHERE mmsi IN (SELECT mmsi FROM distinct_new_mmsi)
                         UNION
                         SELECT mmsi, timestamp as time_begin
                         FROM read_parquet('{path_str}')
@@ -78,9 +84,9 @@ pub fn update_trajectories(tx: &Transaction, path: &Path) -> Result<(), Database
     tx.execute_batch(
         "
 CREATE OR REPLACE TEMP TABLE temp_traj AS
-    (SELECT *
-     FROM latest_trajectories);
-
+    (SELECT id, mmsi, time_begin
+     FROM latest_trajectories
+     WHERE mmsi IN (SELECT mmsi FROM distinct_new_mmsi));
 
 CREATE OR REPLACE TEMP TABLE temp_search_points AS
     (SELECT DISTINCT ON (mmsi) mmsi,
@@ -89,7 +95,8 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
          (SELECT mmsi,
                  time_begin
           FROM newest_message_with_pq
-          UNION SELECT mmsi,
+          UNION 
+          SELECT mmsi,
                        time_begin
           FROM temp_traj)
      ORDER BY time_begin);
@@ -151,8 +158,8 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
         "
 DELETE
 FROM trajectories t
-WHERE id IN
-        (SELECT id
+WHERE t.id IN
+        (SELECT tt.id
          FROM temp_traj tt
          WHERE t.id = tt.id)
          ",
