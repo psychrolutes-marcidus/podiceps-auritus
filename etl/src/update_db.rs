@@ -44,12 +44,37 @@ pub fn update_db(db_path: &Path, file: &Path) -> Result<(), DatabaseError> {
     );
 
     tx.execute(sql.as_str(), [])?;
-    update_trajectories(&tx)?;
+    update_trajectories(&tx, file)?;
     tx.commit()?;
     Ok(())
 }
 
-pub fn update_trajectories(tx: &Transaction) -> Result<(), DatabaseError> {
+pub fn update_trajectories(tx: &Transaction, path: &Path) -> Result<(), DatabaseError> {
+    let path = path.canonicalize()?;
+    let path_str = path.to_string_lossy();
+
+    let query = format!(
+        "
+                    CREATE OR REPLACE TEMP VIEW newest_message_with_pq AS (
+                        SELECT DISTINCT ON (mmsi) mmsi, time_begin
+                        FROM
+                        (SELECT *
+                        FROM newest_message
+                        UNION
+                        SELECT mmsi, timestamp as time_begin
+                        FROM read_parquet('{path_str}')
+                        )
+                        ORDER BY time_begin ASC
+                    );
+                    CREATE OR REPLACE TEMP VIEW newest_pq AS (
+                        SELECT DISTINCT ON (mmsi) mmsi, timestamp as time_begin
+                        FROM read_parquet('{path_str}')
+                        ORDER BY time_begin DESC
+                    );
+                "
+    );
+    tx.execute_batch(&query)?;
+
     tx.execute_batch(
         "
 CREATE OR REPLACE TEMP TABLE temp_traj AS
@@ -63,11 +88,11 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
      FROM
          (SELECT mmsi,
                  time_begin
-          FROM oldest_message
+          FROM newest_message_with_pq
           UNION SELECT mmsi,
                        time_begin
           FROM temp_traj)
-     ORDER BY time_begin DESC);
+     ORDER BY time_begin);
      ",
     )?;
 
@@ -136,6 +161,16 @@ WHERE id IN
          ",
         [],
     )?;
+
+    let query = format!(
+        "
+    INSERT OR REPLACE INTO newest_message (
+        SELECT * FROM newest_pq
+    );
+    "
+    );
+
+    tx.execute_batch(&query)?;
 
     Ok(())
 }
