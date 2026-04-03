@@ -1,3 +1,5 @@
+use approx::AbsDiffEq;
+use cached::proc_macro::once;
 use std::ops::{Div, Sub};
 
 use nalgebra::{matrix, vector};
@@ -10,9 +12,12 @@ where
     pub min: T,
     pub max: T,
 }
+const TOL: f64 = 1e-6;
 
+#[once]
 pub fn judweight_vessel() -> Vec<f64> {
     let mut vec = vector![0., 1., 2., 3., 4., 5.];
+    let mut prev_vec = vec.clone();
     let a12 = 2.;
     let a13 = 5.;
     let a14 = 1.;
@@ -30,24 +35,34 @@ pub fn judweight_vessel() -> Vec<f64> {
     let a56 = 2.;
 
     let mat = matrix![1., a12, a13, a14, a15, a16; 1./a12, 1., a23, a24, a25, a26; 1./a13, 1./a23, 1., a34, a35, a36; 1./a14, 1./a24, 1./a34, 1., a45, a46; 1./a15, 1./a25, 1./a35, 1./a45, 1., a56; 1./a16, 1./a26, 1./a36, 1./a46, 1./a56, 1. ];
-    for _ in 0..100 {
+    loop {
         let some = mat * vec;
         let some_norm = some.norm();
         vec = some / some_norm;
+        if vec.abs_diff_eq(&prev_vec, TOL) {
+            break;
+        }
+        prev_vec = vec.clone();
     }
     let sum = vec.sum();
     let norm_vec = vec.scale(1. / sum);
     norm_vec.iter().cloned().collect::<Vec<f64>>()
 }
 
+#[once]
 pub fn judweight_depth() -> Vec<f64> {
     let mut vec = vector![0., 1.];
+    let mut prev_vec = vec.clone();
     let a12 = 3.;
     let mat = matrix![1., a12; 1. / a12, 1.];
-    for _ in 0..100 {
+    loop {
         let some = mat * vec;
         let some_norm = some.norm();
         vec = some / some_norm;
+        if vec.abs_diff_eq(&prev_vec, TOL) {
+            break;
+        }
+        prev_vec = vec.clone();
     }
     let sum = vec.sum();
     let norm_vec = vec.scale(1. / sum);

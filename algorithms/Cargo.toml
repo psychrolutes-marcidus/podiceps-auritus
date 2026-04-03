@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 nalgebra = { workspace = true }
+cached = { workspace = true }
+approx = { workspace = true }
