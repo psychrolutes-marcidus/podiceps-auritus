@@ -10,7 +10,5 @@ CREATE OR REPLACE VIEW main.confidence_by_mmsi AS (
     FROM
         main.ais_data
     GROUP BY
-        mmsi
-    ORDER BY
-        ma - mi DESC
+        mmsi;
 );
