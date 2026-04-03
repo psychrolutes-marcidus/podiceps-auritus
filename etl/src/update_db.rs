@@ -73,16 +73,13 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
 
     let mut point_pre = tx.prepare(
         "
-    SELECT mmsi,
-           epoch(timestamp) AS timestamp,
-           lon,
-           lat
-    FROM ais_point ap
-    WHERE timestamp >=
-            (SELECT time_begin
-             FROM temp_search_points tsp
-             WHERE ap.mmsi = tsp.mmsi)
-    ORDER BY mmsi, timestamp
+    SELECT ap.mmsi,
+           epoch(ap.timestamp) AS timestamp,
+           ap.lon,
+           ap.lat
+    FROM ais_point ap, temp_search_points tsp
+    WHERE ap.mmsi = tsp.mmsi AND ap.timestamp >= tsp.time_begin
+    ORDER BY ap.mmsi, ap.timestamp
              ",
     )?;
 
