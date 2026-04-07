@@ -44,18 +44,49 @@ pub fn update_db(db_path: &Path, file: &Path) -> Result<(), DatabaseError> {
     );
 
     tx.execute(sql.as_str(), [])?;
-    update_trajectories(&tx)?;
+    update_trajectories(&tx, file)?;
     tx.commit()?;
     Ok(())
 }
 
-pub fn update_trajectories(tx: &Transaction) -> Result<(), DatabaseError> {
+pub fn update_trajectories(tx: &Transaction, path: &Path) -> Result<(), DatabaseError> {
+    let path = path.canonicalize()?;
+    let path_str = path.to_string_lossy();
+
+    let query = format!(
+        "
+                    CREATE OR REPLACE TEMP TABLE distinct_new_mmsi AS (
+                        SELECT DISTINCT mmsi
+                        FROM read_parquet('{path_str}')
+                    );
+
+                    CREATE OR REPLACE TEMP VIEW newest_message_with_pq AS (
+                        SELECT DISTINCT ON (mmsi) mmsi, time_begin
+                        FROM
+                        (SELECT *
+                        FROM newest_message
+                        WHERE mmsi IN (SELECT mmsi FROM distinct_new_mmsi)
+                        UNION
+                        SELECT mmsi, timestamp as time_begin
+                        FROM read_parquet('{path_str}')
+                        )
+                        ORDER BY time_begin ASC
+                    );
+                    CREATE OR REPLACE TEMP VIEW newest_pq AS (
+                        SELECT DISTINCT ON (mmsi) mmsi, timestamp as time_begin
+                        FROM read_parquet('{path_str}')
+                        ORDER BY time_begin DESC
+                    );
+                "
+    );
+    tx.execute_batch(&query)?;
+
     tx.execute_batch(
         "
 CREATE OR REPLACE TEMP TABLE temp_traj AS
-    (SELECT *
-     FROM latest_trajectories);
-
+    (SELECT id, mmsi, time_begin
+     FROM latest_trajectories
+     WHERE mmsi IN (SELECT mmsi FROM distinct_new_mmsi));
 
 CREATE OR REPLACE TEMP TABLE temp_search_points AS
     (SELECT DISTINCT ON (mmsi) mmsi,
@@ -63,26 +94,24 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
      FROM
          (SELECT mmsi,
                  time_begin
-          FROM oldest_message
-          UNION SELECT mmsi,
+          FROM newest_message_with_pq
+          UNION 
+          SELECT mmsi,
                        time_begin
           FROM temp_traj)
-     ORDER BY time_begin DESC);
+     ORDER BY time_begin);
      ",
     )?;
 
     let mut point_pre = tx.prepare(
         "
-    SELECT mmsi,
-           epoch(timestamp) AS timestamp,
-           lon,
-           lat
-    FROM ais_point ap
-    WHERE timestamp >=
-            (SELECT time_begin
-             FROM temp_search_points tsp
-             WHERE ap.mmsi = tsp.mmsi)
-    ORDER BY mmsi, timestamp
+    SELECT ap.mmsi,
+           epoch(ap.timestamp) AS timestamp,
+           ap.lon,
+           ap.lat
+    FROM ais_point ap, temp_search_points tsp
+    WHERE ap.mmsi = tsp.mmsi AND ap.timestamp >= tsp.time_begin
+    ORDER BY ap.mmsi, ap.timestamp
              ",
     )?;
 
@@ -129,13 +158,23 @@ CREATE OR REPLACE TEMP TABLE temp_search_points AS
         "
 DELETE
 FROM trajectories t
-WHERE id IN
-        (SELECT id
+WHERE t.id IN
+        (SELECT tt.id
          FROM temp_traj tt
          WHERE t.id = tt.id)
          ",
         [],
     )?;
+
+    let query = format!(
+        "
+    INSERT OR REPLACE INTO newest_message (
+        SELECT * FROM newest_pq
+    );
+    "
+    );
+
+    tx.execute_batch(&query)?;
 
     Ok(())
 }

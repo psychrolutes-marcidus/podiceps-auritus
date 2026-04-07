@@ -92,9 +92,11 @@ Cargo.lock
 segment_experiment/*.csv
 segment_experiment/*.txt
 
+*.csv
 *.pq
 *.db
 *.wal
+*.tmp
 *.vortex
 *.csv
 *.tmp
