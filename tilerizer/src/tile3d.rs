@@ -64,7 +64,7 @@ pub fn draw_line_triangle(triangle: LineTriangle<4326>, sample_zoom_level: i32) 
     let Triangle { v1, v2, v3 } = triangle_grid;
     let size = (bbmaxx - bbminx) * (bbmaxy - bbminy);
 
-    let mut points: Vec<PointWTime> = Vec::with_capacity(size as usize / 2 + 1);
+    let mut points: Vec<PointWTime> = Vec::new();
 
     let total_area = signed_total_area(v1.x, v1.y, v2.x, v2.y, v3.x, v3.y);
 

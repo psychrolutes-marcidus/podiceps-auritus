@@ -9,6 +9,7 @@ use duckdb::{
 };
 
 pub mod etl;
+pub mod render;
 
 const EXTENSION_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -72,5 +73,6 @@ impl VTab for HelloVTab {
 #[duckdb_entrypoint_c_api(ext_name = "ferruginous")]
 pub fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
     etl::extension_entrypoint(&con)?;
+    render::extension_entrypoint(&con)?;
     Ok(())
 }

@@ -15,6 +15,10 @@ duckdb = { version = "1.10500.0", features = ["loadable-extension", "vscalar"]}
 chrono = { workspace = true }
 linesonmaps = { workspace = true }
 geo = { workspace = true }
+rust_decimal = { workspace = true }
+itertools = { workspace = true }
+tilerizer = { workspace = true }
+modeling = { workspace = true }
 
 
 [lints]

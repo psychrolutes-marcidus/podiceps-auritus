@@ -26,7 +26,7 @@ pub struct FilterTile(pub i32, pub i32, pub i32);
 impl Zoom for PointWZ {
     fn change_zoom(self, zoom_level: i32) -> Self {
         let change = self.z - zoom_level;
- let x;
+        let x;
         let y;
 
         if change > 0 {
@@ -44,7 +44,7 @@ impl Zoom for PointWZ {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone,Hash)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub struct PointWTime {
     pub point: Point,
     pub z: i32,
