@@ -234,6 +234,8 @@ impl ErrorMeasurementConf {
             .collect()
     }
 }
+
+//TODO: maybe i should delete
 pub fn cell_relative_coverage_by_polygon(
     rectangle: (&LineTriangle<4326>, &LineTriangle<4326>),
     gp: &xyzcell::Cell,
