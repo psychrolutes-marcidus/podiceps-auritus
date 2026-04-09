@@ -2,13 +2,15 @@ use std::collections::HashSet;
 use std::f64;
 
 use geo::{
-    BooleanOps as _, ConvexHull, Covers, GeoNum, GeodesicArea, Intersects, Line, Point, Polygon,
-    Relate,
+    BooleanOps as _, Centroid, ClosestPoint, ConvexHull, Covers, Distance, GeoNum, Geodesic,
+    GeodesicArea, Intersects, Line, Point, Polygon, Relate,
 };
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use modeling::modeling::LineTriangle;
 use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
+
+use crate::util::cell_to_polygon;
 pub mod confidence;
 pub mod util;
 pub mod xyzcell;
@@ -85,7 +87,7 @@ impl ErrorMeasurementConf {
         // interpolated_cells
 
         cells
-            .map(|ic| self.length_of_line((f, s), &ic))
+            .map(|ic| length_of_line((f, s), &ic))
             .filter(|(_c, e)| *e != 0_f64)
             .collect()
     }
@@ -103,32 +105,6 @@ impl ErrorMeasurementConf {
                 )
             })
             .collect()
-    }
-
-    fn length_of_line(
-        &self,
-        (f, s): (PointM<4326>, PointM<4326>),
-        gp: &xyzcell::Cell,
-    ) -> CellWithError {
-        let f = Point::new(f.coord.x, f.coord.y);
-        let s = Point::new(s.coord.x, s.coord.y);
-        let l = Line::new(f, s);
-        let poly = util::cell_to_polygon(*gp);
-        let mat_start = poly.relate(&f);
-        let mat_end = poly.relate(&s);
-        let length = match mat_start.is_covers() && mat_end.is_covers() /* if start and end is covered by p, then whole line must be covered as well */ {
-            true => util::line_contained_in_polygon(&l, &poly),
-            false => {
-                if mat_start.is_disjoint() && mat_end.is_disjoint() {
-                    0_f64
-                } else if mat_start.is_covers() || mat_end.is_covers() {
-                    util::line_one_point_in_polygon(&l, &poly)
-                } else {
-                    util::line_no_end_point_in_polygon(&l, &poly)
-                }
-            }
-        };
-        (*gp, length)
     }
 
     fn cell_to_nearest_ground_truth(
@@ -234,6 +210,27 @@ impl ErrorMeasurementConf {
             .collect()
     }
 }
+fn length_of_line((f, s): (PointM<4326>, PointM<4326>), gp: &xyzcell::Cell) -> CellWithError {
+    let f = Point::new(f.coord.x, f.coord.y);
+    let s = Point::new(s.coord.x, s.coord.y);
+    let l = Line::new(f, s);
+    let poly = util::cell_to_polygon(*gp);
+    let mat_start = poly.relate(&f);
+    let mat_end = poly.relate(&s);
+    let length = match mat_start.is_covers() && mat_end.is_covers() /* if start and end is covered by p, then whole line must be covered as well */ {
+            true => util::line_contained_in_polygon(&l, &poly),
+            false => {
+                if mat_start.is_disjoint() && mat_end.is_disjoint() {
+                    0_f64
+                } else if mat_start.is_covers() || mat_end.is_covers() {
+                    util::line_one_point_in_polygon(&l, &poly)
+                } else {
+                    util::line_no_end_point_in_polygon(&l, &poly)
+                }
+            }
+        };
+    (*gp, length)
+}
 
 //TODO: maybe i should delete
 pub fn cell_relative_coverage_by_polygon(
@@ -288,6 +285,33 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         })
         .collect()
 }
+
+fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcell::Cell>>(
+    (f, s): (PointM<4326>, PointM<4326>),
+    cells: Cells,
+) -> Vec<CellWithError> {
+    //TODO: distance from line segment to centroid AND length of sub-line segment in grid relative to a perfect horizontal line (diagonals are just as good)
+    // TODO: if 1 or more points are in a cell, only return centroid distance
+    let i = cells.map(|c| {
+        let p = cell_to_polygon(c);
+        let cent = p.centroid().expect("this method should be infallible");
+        let perfect_line = p.geodesic_perimeter() / 4_f64;
+        let closest = match Line::new(f.coord, s.coord).closest_point(&cent) {
+            geo::Closest::Intersection(p) => p,
+            geo::Closest::SinglePoint(p) => p,
+            geo::Closest::Indeterminate => unreachable!(
+                "closest point between a point and line segment can never be indeterminate"
+            ),
+        };
+        (
+            c,
+            ((length_of_line((f, s), &c).1).clamp(0_f64, perfect_line) / perfect_line)
+                * (Geodesic.distance(cent, closest) / (perfect_line / 2_f64)).max(0_f64), // lines longer than cell width are no better
+        )
+    });
+    todo!()
+}
+
 #[cfg(test)]
 mod test {
 
