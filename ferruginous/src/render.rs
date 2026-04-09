@@ -10,10 +10,8 @@ use itertools::{Itertools, izip};
 use linesonmaps::types::{coordm::CoordM, linem::LineM};
 use modeling::modeling::line_to_triangle_pair;
 use tilerizer::{
-    Point, PointWTime, Zoom, draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle,
+    PointWTime, Zoom, draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle,
 };
-
-use rust_decimal::prelude::*;
 
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
     con.register_scalar_function::<RenderGeom>("render_geom")?;
