@@ -3,7 +3,7 @@ use std::f64;
 
 use geo::{
     BooleanOps as _, Centroid, ClosestPoint, ConvexHull, Covers, Distance, GeoNum, Geodesic,
-    GeodesicArea, Intersects, Line, Point, Polygon, Relate,
+    GeodesicArea, Intersects, Length, Line, Point, Polygon, Relate,
 };
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use modeling::modeling::LineTriangle;
@@ -286,30 +286,44 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         .collect()
 }
 
-fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcell::Cell>>(
+pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcell::Cell>>(
     (f, s): (PointM<4326>, PointM<4326>),
     cells: Cells,
 ) -> Vec<CellWithError> {
-    //TODO: distance from line segment to centroid AND length of sub-line segment in grid relative to a perfect horizontal line (diagonals are just as good)
-    // TODO: if 1 or more points are in a cell, only return centroid distance
     let i = cells.map(|c| {
+        let l = Line::new(f.coord, s.coord);
         let p = cell_to_polygon(c);
+        let poly_side_length = p.geodesic_perimeter() / 4_f64;
+
         let cent = p.centroid().expect("this method should be infallible");
-        let perfect_line = p.geodesic_perimeter() / 4_f64;
-        let closest = match Line::new(f.coord, s.coord).closest_point(&cent) {
+        let closest = match l.closest_point(&cent) {
             geo::Closest::Intersection(p) => p,
             geo::Closest::SinglePoint(p) => p,
-            geo::Closest::Indeterminate => unreachable!(
-                "closest point between a point and line segment can never be indeterminate"
-            ),
+            geo::Closest::Indeterminate => l.start_point(), // degenerate case: if a line segment starts and ends at the same point, this case is reached
+                                                            /* unreachable!(
+                                                            "closest point between a point and line segment can never be indeterminate"
+                                                            )*/
         };
-        (
-            c,
-            ((length_of_line((f, s), &c).1).clamp(0_f64, perfect_line) / perfect_line)
-                * (Geodesic.distance(cent, closest) / (perfect_line / 2_f64)).max(0_f64), // lines longer than cell width are no better
-        )
+        let cent_to_l = Geodesic.distance(cent, closest);
+        let len_in_poly = length_of_line((f, s), &c).1;
+        let cent_ratio = (1_f64 - (cent_to_l / (poly_side_length / 2_f64))).max(0_f64);
+        let line_length_to_perfect = len_in_poly.clamp(0_f64, poly_side_length) / poly_side_length; // how long is sub-line segment (clamped) relative to polygon side length
+        debug_assert!(
+            cent_ratio * line_length_to_perfect >= 0_f64
+                && cent_ratio * line_length_to_perfect <= 1_f64,
+            "product of ratios must be between 0 and 1: cent_ratio={},line_length_to_perfect={}",
+            cent_ratio,
+            line_length_to_perfect
+        );
+        // if 1 or more points are in a cell, only return centroid distance
+        if len_in_poly == Geodesic.length(&l) {
+            // entire line is covered by polygon
+            (c, cent_ratio)
+        } else {
+            (c, cent_ratio * line_length_to_perfect)
+        }
     });
-    todo!()
+    i.collect()
 }
 
 #[cfg(test)]
@@ -628,5 +642,45 @@ mod test {
         let frac = cells_relative_coverage_by_polygon((&triangles.0, &triangles.1), cells);
         dbg!(&frac);
         assert!(frac.iter().all(|cw| cw.1 >= 0_f64 && cw.1 <= 1_f64))
+    }
+    #[test]
+    fn line_error_relative_to_perfect_and_centroid_works() {
+        // line_error_relative_to_perfect_and_centroid;
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+        assert!(lsm.points().count() != 0);
+
+        let cells = draw_linestring(&[lsm.clone()], 21, 21, None)
+            .iter()
+            .map(|pw| xyzcell::Cell {
+                coord: pw.point,
+                z: pw.z as u32,
+            })
+            .collect::<Vec<_>>();
+
+        let (_, cells_length): (Vec<_>, Vec<_>) = lsm
+            .lines()
+            .map(|lm| {
+                (
+                    lm,
+                    line_error_relative_to_perfect_and_centroid(
+                        (lm.from, lm.to),
+                        cells.iter().copied(),
+                    ),
+                )
+            })
+            .unzip();
+        let cells_length = cells_length.into_iter().flatten().collect::<Vec<_>>();
+        dbg!(cells_length.iter().map(|(_, e)| e).collect::<Vec<_>>());
+        assert!(
+            cells_length
+                .iter()
+                .copied()
+                .all(|(_, d)| d >= 0_f64 && d <= 1_f64),
+            "all lenghts should be greater than 0 (assuming linestrings don't have duplicate points"
+        );
     }
 }
