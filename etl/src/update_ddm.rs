@@ -34,7 +34,8 @@ pub fn update_ddm(db_path: &Path, file: &Path) -> Result<(), DatabaseError> {
                 year,
                 ST_Transform (geom, 'EPSG:3034', 'EPSG:3857', always_xy := TRUE) AS geom
             FROM
-                '{path_str}';
+                read_parquet('{path_str}');
+            DROP INDEX IF EXISTS ddm_idx;
             CREATE INDEX ddm_idx ON ddm USING RTREE (geom);
         "
     ))?;
