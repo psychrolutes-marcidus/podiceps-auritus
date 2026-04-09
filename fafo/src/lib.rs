@@ -44,6 +44,7 @@ pub enum RenderingModel {
 impl ErrorMeasurementConf {
     //TODO maybe there should be a function here for aggregating errors across multiple trajectories, but i do not know if it needs any more parameters
     /// Assigns error value to every rendered non ground-truth cell
+    #[deprecated]
     pub fn measure_error_entire_linestring(
         self,
         ls: &LineStringM<4326>,
@@ -134,6 +135,7 @@ impl ErrorMeasurementConf {
             }
         }
     }
+    #[deprecated]
     fn calculate_error(
         &self,
         gt_ls: &LineStringM<4326>,
@@ -166,6 +168,7 @@ impl ErrorMeasurementConf {
                 .unwrap_or(0.0),
         }
     }
+    #[deprecated]
     fn generate_cells(
         &self,
         gt_ls: &LineStringM<4326>,
