@@ -264,7 +264,6 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
     rectangle: (&LineTriangle<4326>, &LineTriangle<4326>),
     gp: Cells,
 ) -> Vec<CellWithError> {
-    //TODO assert that triangles touch
     let mut mlp = rectangle
         .0
         .triangle
