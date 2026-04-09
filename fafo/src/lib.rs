@@ -257,7 +257,7 @@ pub fn cell_relative_coverage_by_polygon(
         .expect("union operation should yield a single polygon");
     let grid_poly = util::cell_to_polygon(*gp);
 
-    let difference = grid_poly.difference(&polygon);
+    let difference = grid_poly.intersection(&polygon);
     difference.geodesic_area_unsigned() / grid_poly.geodesic_area_unsigned()
 }
 pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>(
@@ -283,7 +283,7 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         .map(|(c, gpoly)| {
             (
                 c,
-                gpoly.difference(&polygon).geodesic_area_unsigned()
+                gpoly.intersection(&polygon).geodesic_area_unsigned()
                     / gpoly.geodesic_area_unsigned(),
             )
         })
