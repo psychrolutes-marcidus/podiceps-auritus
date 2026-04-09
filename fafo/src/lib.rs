@@ -1,13 +1,17 @@
 use std::collections::HashSet;
 use std::f64;
 
-use geo::{Covers, GeoNum, Intersects, Line, Point, Relate};
+use geo::{
+    BooleanOps as _, ConvexHull, Covers, GeoNum, GeodesicArea, Intersects, Line, Point, Polygon,
+    Relate,
+};
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
+use modeling::modeling::LineTriangle;
 use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
+pub mod confidence;
 pub mod util;
 pub mod xyzcell;
-pub mod confidence;
 
 pub type CellWithError = (xyzcell::Cell, f64);
 
@@ -231,12 +235,67 @@ impl ErrorMeasurementConf {
     }
 }
 
+//TODO: maybe i should delete
+pub fn cell_relative_coverage_by_polygon(
+    rectangle: (&LineTriangle<4326>, &LineTriangle<4326>),
+    gp: &xyzcell::Cell,
+) -> f64 {
+    //TODO assert that triangles touch
+    let mut mlp = rectangle
+        .0
+        .triangle
+        .to_polygon()
+        .union(&rectangle.1.triangle.to_polygon());
+    debug_assert_eq!(
+        mlp.convex_hull().geodesic_area_signed(),
+        mlp.0[0].geodesic_area_signed(),
+        "input triangles are not perfectly adjacent"
+    );
+    let polygon = mlp
+        .0
+        .pop()
+        .expect("union operation should yield a single polygon");
+    let grid_poly = util::cell_to_polygon(*gp);
+
+    let difference = grid_poly.intersection(&polygon);
+    difference.geodesic_area_unsigned() / grid_poly.geodesic_area_unsigned()
+}
+pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>(
+    rectangle: (&LineTriangle<4326>, &LineTriangle<4326>),
+    gp: Cells,
+) -> Vec<CellWithError> {
+    let mut mlp = rectangle
+        .0
+        .triangle
+        .to_polygon()
+        .union(&rectangle.1.triangle.to_polygon());
+    debug_assert_eq!(
+        mlp.convex_hull().geodesic_area_signed(),
+        mlp.0[0].geodesic_area_signed(),
+        "input triangles are not perfectly adjacent"
+    );
+    let polygon = mlp
+        .0
+        .pop()
+        .expect("union operation should yield a single polygon");
+    gp.map(|c| (c, util::cell_to_polygon(c)))
+        .map(|(c, gpoly)| {
+            (
+                c,
+                gpoly.intersection(&polygon).geodesic_area_unsigned()
+                    / gpoly.geodesic_area_unsigned(),
+            )
+        })
+        .collect()
+}
 #[cfg(test)]
 mod test {
 
     use geo::{BooleanOps, Coord, GeodesicArea, Point};
     use hex;
     use linesonmaps::types::linestringm::LineStringM;
+    use modeling::modeling::line_to_triangle_pair;
+    use tilerizer::tile3d::draw_triangle;
     use tilerizer::{Point as GPoint, draw_linestring};
     use wkb::reader::read_wkb;
 
@@ -307,10 +366,10 @@ mod test {
         let e = conf.measure_error_entire_linestring(
             &lsm,
             RenderingModel::TwoDimensional {
-                a: 10,
-                b: 10,
-                c: 10,
-                d: 10,
+                a: 100,
+                b: 100,
+                c: 100,
+                d: 100,
             },
         );
         let ls_e = ls_conf.measure_error_entire_linestring(&lsm, RenderingModel::Linestring);
@@ -524,5 +583,26 @@ mod test {
             "all lenghts should be greater than 0 (assuming linestrings don't have duplicate points"
         );
         // assert!(false)
+    }
+    #[test]
+    fn realtive_area_works() {
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb)
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap();
+        let triangles = line_to_triangle_pair(&lsm, 100_f64, 100_f64, 100_f64, 100_f64);
+
+        let cells = draw_triangle(triangles.0.triangle, 21)
+            .into_iter()
+            .chain(draw_triangle(triangles.1.triangle, 21))
+            .map(|pw| xyzcell::Cell::from(pw));
+        let frac = cells_relative_coverage_by_polygon((&triangles.0, &triangles.1), cells);
+        dbg!(&frac);
+        assert!(frac.iter().all(|cw| cw.1 >= 0_f64 && cw.1 <= 1_f64))
     }
 }
