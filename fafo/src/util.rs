@@ -119,7 +119,10 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     ]);
 
     let poly = Polygon::new(ps, vec![]);
-
+    debug_assert!(
+        poly.interiors().is_empty(),
+        "polygon should not have any interior rings"
+    );
     poly
 }
 
@@ -189,6 +192,6 @@ mod tests {
         let de_9im = a.clone().map(|p| p.relate(&mp));
         dbg!(MultiPolygon::new(a.to_vec()));
         dbg!(&de_9im);
-        assert!(de_9im.iter().all(|p|p.is_touches()));
+        assert!(de_9im.iter().all(|p| p.is_touches()));
     }
 }
