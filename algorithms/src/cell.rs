@@ -75,7 +75,7 @@ pub fn judweight_depth() -> Vec<f64> {
     norm_vec.iter().cloned().collect::<Vec<f64>>()
 }
 
-pub fn between_min_max<T>(bounds: MinmaxBounds<T>, num: T) -> T
+pub fn relative_to_bounds<T>(bounds: MinmaxBounds<T>, num: T) -> T
 where
     T: PartialOrd + Sub<Output = T> + Div<Output = T> + Copy,
 {
