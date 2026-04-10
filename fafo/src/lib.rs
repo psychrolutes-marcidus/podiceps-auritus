@@ -303,9 +303,6 @@ pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcel
             geo::Closest::Intersection(p) => p,
             geo::Closest::SinglePoint(p) => p,
             geo::Closest::Indeterminate => l.start_point(), // degenerate case: if a line segment starts and ends at the same point, this case is reached
-                                                            /* unreachable!(
-                                                            "closest point between a point and line segment can never be indeterminate"
-                                                            )*/
         };
         let cent_to_l = Geodesic.distance(cent, closest);
         let len_in_poly = length_of_line((f, s), &c).1;
