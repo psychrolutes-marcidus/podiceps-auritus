@@ -40,3 +40,4 @@ clap = { version = "4.5.60", features = ["derive"] }
 thiserror = "2.0.18"
 geo = "0.31.0"
 itertools = "0.14.0"
+fafo = { path = "fafo" }

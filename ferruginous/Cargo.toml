@@ -19,6 +19,7 @@ rust_decimal = { workspace = true }
 itertools = { workspace = true }
 tilerizer = { workspace = true }
 modeling = { workspace = true }
+fafo = { workspace = true }
 
 
 [lints]

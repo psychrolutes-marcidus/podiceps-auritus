@@ -6,9 +6,10 @@ use duckdb::{
     core::{LogicalTypeHandle, LogicalTypeId},
     vscalar::{ScalarFunctionSignature, VScalar},
 };
+use fafo::{ErrorMeasurementConf, cells_relative_coverage_by_polygon, xyzcell::Cell};
 use itertools::{Itertools, izip};
-use linesonmaps::types::{coordm::CoordM, linem::LineM};
-use modeling::modeling::line_to_triangle_pair;
+use linesonmaps::types::{coordm::CoordM, linem::LineM, pointm::PointM};
+use modeling::modeling::{LineTriangle, line_to_triangle_pair};
 use tilerizer::{
     PointWTime, Zoom, draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle,
 };
@@ -16,6 +17,12 @@ use tilerizer::{
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
     con.register_scalar_function::<RenderGeom>("render_geom")?;
     Ok(())
+}
+
+enum RenderMethod {
+    Dim(LineTriangle<4326>, LineTriangle<4326>),
+    Line(PointM<4326>, PointM<4326>),
+    Point(PointM<4326>),
 }
 
 struct RenderGeom;
@@ -140,7 +147,6 @@ impl VScalar for RenderGeom {
             dimensions,
             sample_level_s.iter().map(|&x| x as i32)
         )
-        // .inspect(|_| println!("Entering rendering"))
         .map(|(from_point, to_point, dim, sam_lev)| {
             // Convert point to the grid.
             let from_point_grid = point_to_grid((from_point.0.x, from_point.0.y).into(), sam_lev);
@@ -158,32 +164,35 @@ impl VScalar for RenderGeom {
                         dim.2 as f64,
                         dim.3 as f64,
                     );
-                    let mut points = draw_line_triangle(tri1, sam_lev);
-                    let points2 = draw_line_triangle(tri2, sam_lev);
+                    let mut points = draw_line_triangle(&tri1, sam_lev);
+                    let points2 = draw_line_triangle(&tri2, sam_lev);
                     points.extend_from_slice(&points2);
-                    return points;
+                    return (points, RenderMethod::Dim(tri1, tri2));
                 }
-                return enhance_point(
+                let points = enhance_point(
                     draw_line(from_point_grid, to_point_grid),
                     DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
                     DateTime::from_timestamp_secs(to_point.1 as i64).unwrap(),
                     sam_lev,
                 );
+                return (
+                    points,
+                    RenderMethod::Line(from_point.0.into(), to_point.0.into()),
+                );
             }
-            return vec![PointWTime {
+            let points = vec![PointWTime {
                 point: from_point_grid,
                 z: sam_lev,
                 time_start: DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
                 time_end: DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
             }];
+            return (points, RenderMethod::Point(from_point.0.into()));
         })
-        // .inspect(|_| println!("Finished rendering"))
         .zip(level_s.iter().map(|&x| x as i32))
-        // .inspect(|_| println!("Entering reduction step"))
         .map(|(d, s)| {
-            let mut points = d.iter().map(|x| x.change_zoom(s)).collect::<Vec<_>>();
+            let mut points = d.0.iter().map(|x| x.change_zoom(s)).collect::<Vec<_>>();
             points.sort_by_cached_key(|x| (x.point, x.time_start, x.time_end));
-            points
+            let reduced_points: Vec<_> = points
                 .chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
                 .map(|x| {
                     let first = x.first().expect("Chunks are not empty");
@@ -193,18 +202,38 @@ impl VScalar for RenderGeom {
                         ..*first
                     }
                 })
-                .collect::<Vec<_>>()
+                .collect();
+
+            let cells = || reduced_points.iter().map(|&x| Cell::from(x));
+            match d.1 {
+                RenderMethod::Dim(line_triangle, line_triangle1) => {
+                    let cov = cells_relative_coverage_by_polygon(
+                        (&line_triangle, &line_triangle1),
+                        cells(),
+                    );
+                    let conf = ErrorMeasurementConf::builder()
+                        .method(fafo::ErrorMeasurementMethod::Geodesic)
+                        .zoom(s as u8)
+                        .build();
+                    let dist = conf.cell_distance_to_ground_truth(
+                        (line_triangle.line.from, line_triangle.line.to),
+                        cells(),
+                    );
+                    cov.iter()
+                        .zip(dist.iter())
+                        .map(|(cov, dist)| (cov.1, dist.1))
+                        .zip(reduced_points.iter())
+                        .map(|((cov, dist), &point)| (point, cov, dist))
+                }
+                RenderMethod::Line(point_m, point_m1) => todo!(),
+                RenderMethod::Point(point_m) => todo!(),
+            }
         })
         .inspect(|x| {
             lengths.push(x.len());
-            // println!(
-            //     "Current Capacity: {}",
-            //     lengths.iter().cloned().sum::<usize>()
-            // )
         });
         let (x, y, z, tb, te): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = data
             .flatten()
-            // .inspect(|_| println!("Entering map to tuple"))
             .map(
                 |PointWTime {
                      point,
@@ -221,7 +250,6 @@ impl VScalar for RenderGeom {
                     )
                 },
             )
-            // .inspect(|_| println!("Finish tuple map, entering multiunzip"))
             .multiunzip();
         let mut list_out = output.list_vector();
         let struct_out = list_out.struct_child(lengths.iter().sum());
@@ -270,11 +298,11 @@ impl VScalar for RenderGeom {
             ("z", LogicalTypeHandle::from(LogicalTypeId::Integer)),
             ("time_start", LogicalTypeHandle::from(LogicalTypeId::Double)),
             ("time_end", LogicalTypeHandle::from(LogicalTypeId::Double)),
-            // ("d_to_ais", LogicalTypeHandle::from(LogicalTypeId::Float)),
-            // (
-            //     "cell_covered",
-            //     LogicalTypeHandle::from(LogicalTypeId::Float),
-            // ),
+            ("d_to_ais", LogicalTypeHandle::from(LogicalTypeId::Float)),
+            (
+                "cell_covered",
+                LogicalTypeHandle::from(LogicalTypeId::Float),
+            ),
         ];
 
         let params = vec![

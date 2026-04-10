@@ -156,8 +156,8 @@ pub fn draw_2d_vessel(
                 })
                 .flat_map(|(tri1, tri2)| {
                     [
-                        draw_line_triangle(tri1, sampling_zoom_level),
-                        draw_line_triangle(tri2, sampling_zoom_level),
+                        draw_line_triangle(&tri1, sampling_zoom_level),
+                        draw_line_triangle(&tri2, sampling_zoom_level),
                     ]
                 })
                 .flatten()
