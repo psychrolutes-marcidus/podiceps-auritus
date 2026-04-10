@@ -293,8 +293,8 @@ pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcel
     (f, s): (PointM<4326>, PointM<4326>),
     cells: Cells,
 ) -> Vec<CellWithError> {
+    let l = Line::new(f.coord, s.coord);
     let i = cells.map(|c| {
-        let l = Line::new(f.coord, s.coord);
         let p = cell_to_polygon(c);
         let poly_side_length = p.geodesic_perimeter() / 4_f64;
 
