@@ -141,7 +141,7 @@ impl ErrorMeasurementConf {
         gt_ls: &LineStringM<4326>,
         cells: &HashSet<xyzcell::Cell>,
     ) -> Vec<CellWithError> {
-        let ground_truth_cells = self.ground_truth_cells(&gt_ls);
+        let ground_truth_cells = self.ground_truth_cells(gt_ls);
         debug_assert!(
             ground_truth_cells.intersection(cells).count() == 0,
             "cells should be disjoint with ground-truth cells"
@@ -163,7 +163,7 @@ impl ErrorMeasurementConf {
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, &gp, self.zoom))
+                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, gp, self.zoom))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
