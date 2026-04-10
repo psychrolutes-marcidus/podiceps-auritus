@@ -2,8 +2,8 @@ use std::collections::HashSet;
 use std::f64;
 
 use geo::{
-    BooleanOps as _, Centroid, ClosestPoint, ConvexHull, Covers, Distance, GeoNum, Geodesic,
-    GeodesicArea, Intersects, Length, Line, Point, Polygon, Relate,
+    BooleanOps as _, Centroid, ClosestPoint, ConvexHull, Distance, GeoNum, Geodesic,
+    GeodesicArea, Length, Line, Point, Relate,
 };
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use modeling::modeling::LineTriangle;
