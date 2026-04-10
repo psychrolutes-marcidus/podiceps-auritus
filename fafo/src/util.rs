@@ -22,7 +22,7 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     let ls = p.exterior().lines();
     let intersections = ls
         .filter_map(|pl| line_intersection(*l, pl)) // this contains 2 single point intersections XOR 1 collinear intersection
-        .map(|i| match i {
+        .flat_map(|i| match i {
             LineIntersection::Collinear { intersection } => {
                 vec![intersection.start, intersection.end]
             }
@@ -33,7 +33,6 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
                 vec![intersection]
             }
         })
-        .flatten()
         .take(2)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -119,7 +118,10 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     ]);
 
     let poly = Polygon::new(ps, vec![]);
-
+    debug_assert!(
+        poly.interiors().is_empty(),
+        "polygon should not have any interior rings"
+    );
     poly
 }
 
@@ -189,6 +191,6 @@ mod tests {
         let de_9im = a.clone().map(|p| p.relate(&mp));
         dbg!(MultiPolygon::new(a.to_vec()));
         dbg!(&de_9im);
-        assert!(de_9im.iter().all(|p|p.is_touches()));
+        assert!(de_9im.iter().all(|p| p.is_touches()));
     }
 }
