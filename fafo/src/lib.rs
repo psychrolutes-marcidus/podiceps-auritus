@@ -2,13 +2,15 @@ use std::collections::HashSet;
 use std::f64;
 
 use geo::{
-    BooleanOps as _, ConvexHull, Covers, GeoNum, GeodesicArea, Intersects, Line, Point, Polygon,
-    Relate,
+    BooleanOps as _, Centroid, ClosestPoint, ConvexHull, Distance, GeoNum, Geodesic,
+    GeodesicArea, Length, Line, Point, Relate,
 };
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use modeling::modeling::LineTriangle;
 use tilerizer::{draw_2d_vessel, draw_linestring, point_to_grid};
 use typed_builder::TypedBuilder;
+
+use crate::util::cell_to_polygon;
 pub mod confidence;
 pub mod util;
 pub mod xyzcell;
@@ -42,6 +44,7 @@ pub enum RenderingModel {
 impl ErrorMeasurementConf {
     //TODO maybe there should be a function here for aggregating errors across multiple trajectories, but i do not know if it needs any more parameters
     /// Assigns error value to every rendered non ground-truth cell
+    #[deprecated]
     pub fn measure_error_entire_linestring(
         self,
         ls: &LineStringM<4326>,
@@ -85,7 +88,7 @@ impl ErrorMeasurementConf {
         // interpolated_cells
 
         cells
-            .map(|ic| self.length_of_line((f, s), &ic))
+            .map(|ic| length_of_line((f, s), &ic))
             .filter(|(_c, e)| *e != 0_f64)
             .collect()
     }
@@ -103,32 +106,6 @@ impl ErrorMeasurementConf {
                 )
             })
             .collect()
-    }
-
-    fn length_of_line(
-        &self,
-        (f, s): (PointM<4326>, PointM<4326>),
-        gp: &xyzcell::Cell,
-    ) -> CellWithError {
-        let f = Point::new(f.coord.x, f.coord.y);
-        let s = Point::new(s.coord.x, s.coord.y);
-        let l = Line::new(f, s);
-        let poly = util::cell_to_polygon(*gp);
-        let mat_start = poly.relate(&f);
-        let mat_end = poly.relate(&s);
-        let length = match mat_start.is_covers() && mat_end.is_covers() /* if start and end is covered by p, then whole line must be covered as well */ {
-            true => util::line_contained_in_polygon(&l, &poly),
-            false => {
-                if mat_start.is_disjoint() && mat_end.is_disjoint() {
-                    0_f64
-                } else if mat_start.is_covers() || mat_end.is_covers() {
-                    util::line_one_point_in_polygon(&l, &poly)
-                } else {
-                    util::line_no_end_point_in_polygon(&l, &poly)
-                }
-            }
-        };
-        (*gp, length)
     }
 
     fn cell_to_nearest_ground_truth(
@@ -158,12 +135,13 @@ impl ErrorMeasurementConf {
             }
         }
     }
+    #[deprecated]
     fn calculate_error(
         &self,
         gt_ls: &LineStringM<4326>,
         cells: &HashSet<xyzcell::Cell>,
     ) -> Vec<CellWithError> {
-        let ground_truth_cells = self.ground_truth_cells(&gt_ls);
+        let ground_truth_cells = self.ground_truth_cells(gt_ls);
         debug_assert!(
             ground_truth_cells.intersection(cells).count() == 0,
             "cells should be disjoint with ground-truth cells"
@@ -185,11 +163,12 @@ impl ErrorMeasurementConf {
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, &gp, self.zoom))
+                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, gp, self.zoom))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
     }
+    #[deprecated]
     fn generate_cells(
         &self,
         gt_ls: &LineStringM<4326>,
@@ -233,6 +212,27 @@ impl ErrorMeasurementConf {
             })
             .collect()
     }
+}
+fn length_of_line((f, s): (PointM<4326>, PointM<4326>), gp: &xyzcell::Cell) -> CellWithError {
+    let f = Point::new(f.coord.x, f.coord.y);
+    let s = Point::new(s.coord.x, s.coord.y);
+    let l = Line::new(f, s);
+    let poly = util::cell_to_polygon(*gp);
+    let mat_start = poly.relate(&f);
+    let mat_end = poly.relate(&s);
+    let length = match mat_start.is_covers() && mat_end.is_covers() /* if start and end is covered by p, then whole line must be covered as well */ {
+            true => util::line_contained_in_polygon(&l, &poly),
+            false => {
+                if mat_start.is_disjoint() && mat_end.is_disjoint() {
+                    0_f64
+                } else if mat_start.is_covers() || mat_end.is_covers() {
+                    util::line_one_point_in_polygon(&l, &poly)
+                } else {
+                    util::line_no_end_point_in_polygon(&l, &poly)
+                }
+            }
+        };
+    (*gp, length)
 }
 
 //TODO: maybe i should delete
@@ -288,6 +288,44 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         })
         .collect()
 }
+
+pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcell::Cell>>(
+    (f, s): (PointM<4326>, PointM<4326>),
+    cells: Cells,
+) -> Vec<CellWithError> {
+    let l = Line::new(f.coord, s.coord);
+    let i = cells.map(|c| {
+        let p = cell_to_polygon(c);
+        let poly_side_length = p.geodesic_perimeter() / 4_f64;
+
+        let cent = p.centroid().expect("this method should be infallible");
+        let closest = match l.closest_point(&cent) {
+            geo::Closest::Intersection(p) => p,
+            geo::Closest::SinglePoint(p) => p,
+            geo::Closest::Indeterminate => l.start_point(), // degenerate case: if a line segment starts and ends at the same point, this case is reached
+        };
+        let cent_to_l = Geodesic.distance(cent, closest);
+        let len_in_poly = length_of_line((f, s), &c).1;
+        let cent_ratio = (1_f64 - (cent_to_l / (poly_side_length / 2_f64))).max(0_f64);
+        let line_length_to_perfect = len_in_poly.clamp(0_f64, poly_side_length) / poly_side_length; // how long is sub-line segment (clamped) relative to polygon side length
+        debug_assert!(
+            cent_ratio * line_length_to_perfect >= 0_f64
+                && cent_ratio * line_length_to_perfect <= 1_f64,
+            "product of ratios must be between 0 and 1: cent_ratio={},line_length_to_perfect={}",
+            cent_ratio,
+            line_length_to_perfect
+        );
+        // if 1 or more points are in a cell, only return centroid distance
+        if len_in_poly == Geodesic.length(&l) {
+            // entire line is covered by polygon
+            (c, cent_ratio)
+        } else {
+            (c, cent_ratio * line_length_to_perfect)
+        }
+    });
+    i.collect()
+}
+
 #[cfg(test)]
 mod test {
 
@@ -604,5 +642,45 @@ mod test {
         let frac = cells_relative_coverage_by_polygon((&triangles.0, &triangles.1), cells);
         dbg!(&frac);
         assert!(frac.iter().all(|cw| cw.1 >= 0_f64 && cw.1 <= 1_f64))
+    }
+    #[test]
+    fn line_error_relative_to_perfect_and_centroid_works() {
+        // line_error_relative_to_perfect_and_centroid;
+        const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
+
+        let bytea = hex::decode(HEXSTRING).unwrap();
+        let wkb = read_wkb(&bytea).unwrap();
+        let lsm = LineStringM::<4326>::try_from(wkb).unwrap();
+        assert!(lsm.points().count() != 0);
+
+        let cells = draw_linestring(&[lsm.clone()], 21, 21, None)
+            .iter()
+            .map(|pw| xyzcell::Cell {
+                coord: pw.point,
+                z: pw.z as u32,
+            })
+            .collect::<Vec<_>>();
+
+        let (_, cells_length): (Vec<_>, Vec<_>) = lsm
+            .lines()
+            .map(|lm| {
+                (
+                    lm,
+                    line_error_relative_to_perfect_and_centroid(
+                        (lm.from, lm.to),
+                        cells.iter().copied(),
+                    ),
+                )
+            })
+            .unzip();
+        let cells_length = cells_length.into_iter().flatten().collect::<Vec<_>>();
+        dbg!(cells_length.iter().map(|(_, e)| e).collect::<Vec<_>>());
+        assert!(
+            cells_length
+                .iter()
+                .copied()
+                .all(|(_, d)| d >= 0_f64 && d <= 1_f64),
+            "all lenghts should be greater than 0 (assuming linestrings don't have duplicate points"
+        );
     }
 }

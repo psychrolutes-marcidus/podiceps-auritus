@@ -16,12 +16,11 @@ const fn draught_deviation_from_confidence(
         false => {
             let left = *confidence.start() - draught; // draught is to the left of interval
             let right = draught - *confidence.end(); // to the right
-            let closest = if draught < *confidence.start() {
+            if draught < *confidence.start() {
                 left
             } else {
                 right
-            };
-            closest
+            }
         }
     }
 }
@@ -62,6 +61,6 @@ mod test {
 
     #[test]
     fn square_error_is_squaring() {
-        assert_eq!(score_deviation(12_f64, &INTERVAL),4_f64);
+        assert_eq!(score_deviation(12_f64, &INTERVAL), 4_f64);
     }
 }
