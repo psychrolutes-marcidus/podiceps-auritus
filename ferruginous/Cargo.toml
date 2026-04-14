@@ -20,6 +20,7 @@ itertools = { workspace = true }
 tilerizer = { workspace = true }
 modeling = { workspace = true }
 fafo = { workspace = true }
+rayon = { workspace = true }
 
 
 [lints]
