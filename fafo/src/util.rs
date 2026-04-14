@@ -1,4 +1,5 @@
 use crate::xyzcell;
+use geo::Winding;
 use geo::{
     Coord, Covers, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
@@ -109,13 +110,15 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         .atan()
         * (180_f64 / f64::consts::PI);
 
-    let ps = LineString::from(vec![
+    let mut ps = LineString::from(vec![
         (lon, lat_1),   // NW
         (lon, lat),     // SW
         (lon_1, lat),   // SE
         (lon_1, lat_1), // NE
         (lon, lat_1),   // NW /* remember to close the polygon */
     ]);
+    ps.make_ccw_winding();
+    debug_assert!(ps.is_ccw(), "{ps:?}");
 
     let poly = Polygon::new(ps, vec![]);
     debug_assert!(
