@@ -1,9 +1,9 @@
 use crate::xyzcell;
-use geo::{IsConvex, Winding};
 use geo::{
     Coord, Covers, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
 };
+use geo::{IsConvex, Winding};
 use std::f64;
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
