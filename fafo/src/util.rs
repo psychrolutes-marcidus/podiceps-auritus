@@ -1,5 +1,5 @@
 use crate::xyzcell;
-use geo::Winding;
+use geo::{IsConvex, Winding};
 use geo::{
     Coord, Covers, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
@@ -118,7 +118,7 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         (lon, lat_1),   // NW /* remember to close the polygon */
     ]);
     ps.make_ccw_winding();
-    debug_assert!(ps.is_ccw(), "{ps:?}");
+    debug_assert!(ps.is_ccw_convex(), "{ps:?}");
 
     let poly = Polygon::new(ps, vec![]);
     debug_assert!(
