@@ -110,11 +110,11 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         * (180_f64 / f64::consts::PI);
 
     let ps = LineString::from(vec![
-        (lon, lat_1),   // NW
-        (lon, lat),     // SW
-        (lon_1, lat),   // SE
-        (lon_1, lat_1), // NE
-        (lon, lat_1),   // NW /* remember to close the polygon */
+        (lon, lat),     // NW
+        (lon, lat_1),   // SW
+        (lon_1, lat_1), // SE
+        (lon_1, lat),   // NE
+        (lon, lat),     // NW /* remember to close the polygon */
     ]);
 
     let poly = Polygon::new(ps, vec![]);
@@ -125,10 +125,9 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     poly
 }
 
-pub(crate) fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
+pub fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
     p: P,
     gp: &xyzcell::Cell,
-    _zoom: u8,
 ) -> f64 {
     Geodesic.distance(grid_centroid_to_lon_lat(*gp, gp.z as u8), p.into())
 }
