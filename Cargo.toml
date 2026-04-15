@@ -38,4 +38,8 @@ duckdb = { version = "1.10500.0", features = ["bundled", "modern-full"]}
 rust_decimal = "1.40.0"
 clap = { version = "4.5.60", features = ["derive"] }
 thiserror = "2.0.18"
+nalgebra = "0.34.1"
 geo = "0.31.0"
+algorithms = { path = "algorithms" }
+cached = "0.59.0"
+approx = "0.5.1"
