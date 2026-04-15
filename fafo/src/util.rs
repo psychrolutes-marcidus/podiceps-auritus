@@ -197,6 +197,7 @@ mod tests {
         assert!(de_9im.iter().all(|p| p.is_touches()));
     }
 
+    #[test]
     fn degenerate_polygon_area_is_zero() {
         let degenerate_polygon = polygon![(x:0.0,y:0.0),(x:0.0,y:0.0),(x:0.0,y:0.0),(x:0.0,y:0.0)];
         assert_eq!(degenerate_polygon.geodesic_area_unsigned(), 0.0);
