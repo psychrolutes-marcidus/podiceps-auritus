@@ -81,7 +81,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_name() {
+    fn gives_result() {
         let vec: [f64; 2] = judweight_depth().as_array().unwrap().to_owned();
         let source_bounds = MinmaxBounds { min: 0., max: 7. };
         let age_bounds = MinmaxBounds {
