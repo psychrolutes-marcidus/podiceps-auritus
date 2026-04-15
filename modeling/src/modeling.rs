@@ -6,6 +6,7 @@ use geo_traits::{CoordTrait, LineTrait};
 use geo_types::geometry::Triangle;
 use linesonmaps::types::{linem::LineM, pointm::PointM};
 
+#[derive(Debug)]
 pub struct LineTriangle<const CRS: u64> {
     pub triangle: Triangle,
     pub line: LineM<CRS>,
