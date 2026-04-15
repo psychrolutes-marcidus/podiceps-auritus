@@ -63,7 +63,7 @@ fn main() {
             let path = match update.import_file.xor(update.import_directory) {
                 Some(p) => p,
                 None => {
-                    println!("A file OR a directory must be set");
+                    println!("A file XOR a directory must be set");
                     exit(1)
                 }
             };
