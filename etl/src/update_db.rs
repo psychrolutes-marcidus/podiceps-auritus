@@ -58,12 +58,3 @@ pub fn update_db(db_path: &Path, path: &Path) -> Result<(), DatabaseError> {
     tx.commit()?;
     Ok(())
 }
-
-fn dist(first: PointM, second: PointM, thres: f64) -> bool {
-    use geo::algorithm::line_measures::metric_spaces::Geodesic;
-    Geodesic.distance(first, second) < thres
-}
-
-const fn time_dist(first: PointM, second: PointM, thres: f64) -> bool {
-    second.coord.m - first.coord.m < thres
-}
