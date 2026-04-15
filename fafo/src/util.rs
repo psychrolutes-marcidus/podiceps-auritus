@@ -141,7 +141,7 @@ mod tests {
     use crate::xyzcell::Cell;
 
     use super::*;
-    use geo::{BooleanOps, Centroid, MultiPolygon};
+    use geo::{BooleanOps, Centroid, GeodesicArea, MultiPolygon, polygon};
     use geo::{Relate, coord, geometry::Rect, point};
     use tilerizer::Point;
     #[test]
@@ -195,5 +195,10 @@ mod tests {
         dbg!(MultiPolygon::new(a.to_vec()));
         dbg!(&de_9im);
         assert!(de_9im.iter().all(|p| p.is_touches()));
+    }
+
+    fn degenerate_polygon_area_is_zero() {
+        let degenerate_polygon = polygon![(x:0.0,y:0.0),(x:0.0,y:0.0),(x:0.0,y:0.0),(x:0.0,y:0.0)];
+        assert_eq!(degenerate_polygon.geodesic_area_unsigned(), 0.0);
     }
 }
