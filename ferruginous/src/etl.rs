@@ -1,6 +1,6 @@
 use algorithms::cell::MinmaxBounds;
-use algorithms::cell::between_min_max;
 use algorithms::cell::judweight_depth;
+use algorithms::cell::relative_to_bounds;
 use std::error::Error;
 
 use duckdb::{
@@ -50,8 +50,8 @@ impl VScalar for DDMReliability {
             .zip(slice_year)
             .map(|(&s, y)| {
                 (
-                    1. - between_min_max(source_bounds, s as f64),
-                    between_min_max(age_bounds, y as f64),
+                    1. - relative_to_bounds(source_bounds, s as f64),
+                    relative_to_bounds(age_bounds, y as f64),
                 )
             })
             .map(|(s, y)| weight[0] * s + (weight[1] * y).max(0.).min(1.))
