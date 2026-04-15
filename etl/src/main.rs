@@ -1,15 +1,17 @@
 use std::{
     backtrace::Backtrace,
     path::{Path, PathBuf},
+    process::exit,
 };
 use thiserror::Error;
 
 use clap::Parser;
 
-use crate::{new_db::create_db, update_db::update_db};
+use crate::{new_db::create_db, update_db::update_db, update_ddm::update_ddm};
 
 mod new_db;
 mod update_db;
+mod update_ddm;
 
 #[derive(Error, Debug)]
 pub enum DatabaseError {
@@ -25,6 +27,7 @@ pub enum DatabaseError {
 enum Args {
     NewDatabase(NewDatabase),
     UpdateDatabase(Update),
+    UpdateDDM(UpdateDDM),
 }
 
 #[derive(clap::Args, Debug)]
@@ -32,7 +35,17 @@ struct Update {
     #[arg(short, long)]
     db_path: PathBuf,
     #[arg(short, long)]
-    import_file: PathBuf,
+    import_file: Option<PathBuf>,
+    #[arg(short, long)]
+    import_directory: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug)]
+struct UpdateDDM {
+    #[arg(long)]
+    db_path: PathBuf,
+    #[arg(long)]
+    ddm_file: PathBuf,
 }
 
 #[derive(clap::Args, Debug)]
@@ -47,8 +60,18 @@ fn main() {
             let _conn = create_db(&path).unwrap();
         }
         Args::UpdateDatabase(update) => {
-            let path = Path::new(&update.import_file);
-            update_db(&update.db_path, path).unwrap();
+            let path = match update.import_file.xor(update.import_directory) {
+                Some(p) => p,
+                None => {
+                    println!("A file XOR a directory must be set");
+                    exit(1)
+                }
+            };
+            update_db(&update.db_path, &path).unwrap();
+        }
+        Args::UpdateDDM(ddm_update) => {
+            let path = Path::new(&ddm_update.ddm_file);
+            update_ddm(&ddm_update.db_path, path).unwrap();
         }
     }
 }

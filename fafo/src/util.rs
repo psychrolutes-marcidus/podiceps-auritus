@@ -22,7 +22,7 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
     let ls = p.exterior().lines();
     let intersections = ls
         .filter_map(|pl| line_intersection(*l, pl)) // this contains 2 single point intersections XOR 1 collinear intersection
-        .map(|i| match i {
+        .flat_map(|i| match i {
             LineIntersection::Collinear { intersection } => {
                 vec![intersection.start, intersection.end]
             }
@@ -33,7 +33,6 @@ pub(crate) fn line_no_end_point_in_polygon(l: &Line, p: &Polygon) -> f64 {
                 vec![intersection]
             }
         })
-        .flatten()
         .take(2)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -111,22 +110,24 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         * (180_f64 / f64::consts::PI);
 
     let ps = LineString::from(vec![
-        (lon, lat_1),   // NW
-        (lon, lat),     // SW
-        (lon_1, lat),   // SE
-        (lon_1, lat_1), // NE
-        (lon, lat_1),   // NW /* remember to close the polygon */
+        (lon, lat),     // NW
+        (lon, lat_1),   // SW
+        (lon_1, lat_1), // SE
+        (lon_1, lat),   // NE
+        (lon, lat),     // NW /* remember to close the polygon */
     ]);
 
     let poly = Polygon::new(ps, vec![]);
-
+    debug_assert!(
+        poly.interiors().is_empty(),
+        "polygon should not have any interior rings"
+    );
     poly
 }
 
-pub(crate) fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
+pub fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
     p: P,
     gp: &xyzcell::Cell,
-    _zoom: u8,
 ) -> f64 {
     Geodesic.distance(grid_centroid_to_lon_lat(*gp, gp.z as u8), p.into())
 }
@@ -189,6 +190,6 @@ mod tests {
         let de_9im = a.clone().map(|p| p.relate(&mp));
         dbg!(MultiPolygon::new(a.to_vec()));
         dbg!(&de_9im);
-        assert!(de_9im.iter().all(|p|p.is_touches()));
+        assert!(de_9im.iter().all(|p| p.is_touches()));
     }
 }
