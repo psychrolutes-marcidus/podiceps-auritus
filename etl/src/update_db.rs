@@ -1,5 +1,5 @@
 use rayon::prelude::*;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use crate::DatabaseError;
 use duckdb::{Connection, Transaction, params};
@@ -9,27 +9,41 @@ use linesonmaps::{
     types::{coordm::CoordM, linestringm::LineStringM, pointm::PointM},
 };
 
-pub fn update_db(db_path: &Path, file: &Path) -> Result<(), DatabaseError> {
+pub fn update_db(db_path: &Path, path: &Path) -> Result<(), DatabaseError> {
     let mut conn = Connection::open(db_path)?;
 
     let tx = conn.transaction()?;
-    if !file.is_file() {
+    if !path.is_file() {
         return Err(DatabaseError::FileDoesNotExist);
     }
 
-    let path = file.canonicalize()?;
-    let path_str = path.to_string_lossy();
-
-    let count: i32 = tx.query_row(
-        "SELECT count(*) FROM file_store WHERE path == ?",
-        [path_str.clone()],
-        |row| row.get(0),
-    )?;
-    if count != 0 {
-        return Ok(());
+    let path_strs = match path.is_dir() {
+        true => {
+            // Read all files in the directory
+            let path = path.canonicalize()?;
+            let paths = fs::read_dir(path)?;
+            paths
+                .map(|x| x.ok())
+                .flatten()
+                .map(|x| x.path().display().to_string())
+                .collect()
+        }
+        false => {
+            let path = path.canonicalize()?;
+            vec![path.to_string_lossy().to_string()]
+        }
+    };
+    for ele in path_strs {
+        let count: i32 = tx.query_row(
+            "SELECT count(*) FROM file_store WHERE path == ?",
+            [ele.clone()],
+            |row| row.get(0),
+        )?;
+        if count != 0 {
+            return Ok(());
+        }
+        tx.execute("INSERT INTO file_store VALUES (?)", [ele])?;
     }
-
-    tx.execute("INSERT INTO file_store VALUES (?)", [path_str])?;
 
     let mut stmt = tx.prepare("SELECT path FROM file_store")?;
     let paths: Vec<String> = stmt
@@ -44,7 +58,7 @@ pub fn update_db(db_path: &Path, file: &Path) -> Result<(), DatabaseError> {
     );
 
     tx.execute(sql.as_str(), [])?;
-    update_trajectories(&tx, file)?;
+    update_trajectories(&tx, path)?;
     tx.commit()?;
     Ok(())
 }
