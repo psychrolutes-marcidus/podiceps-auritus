@@ -36,10 +36,9 @@ pub fn update_db(db_path: &Path, path: &Path) -> Result<(), DatabaseError> {
             [ele.clone()],
             |row| row.get(0),
         )?;
-        if count != 0 {
-            continue;
-        }
+        if count == 0 {
         tx.execute("INSERT INTO file_store VALUES (?)", [ele])?;
+        }
     }
 
     let mut stmt = tx.prepare("SELECT path FROM file_store ORDER BY path")?;
