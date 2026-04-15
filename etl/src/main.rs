@@ -1,6 +1,7 @@
 use std::{
     backtrace::Backtrace,
     path::{Path, PathBuf},
+    process::exit,
 };
 use thiserror::Error;
 
@@ -34,7 +35,9 @@ struct Update {
     #[arg(short, long)]
     db_path: PathBuf,
     #[arg(short, long)]
-    import_file: PathBuf,
+    import_file: Option<PathBuf>,
+    #[arg(short, long)]
+    import_directory: Option<PathBuf>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -57,8 +60,14 @@ fn main() {
             let _conn = create_db(&path).unwrap();
         }
         Args::UpdateDatabase(update) => {
-            let path = Path::new(&update.import_file);
-            update_db(&update.db_path, path).unwrap();
+            let path = match update.import_file.xor(update.import_directory) {
+                Some(p) => p,
+                None => {
+                    println!("A file XOR a directory must be set");
+                    exit(1)
+                }
+            };
+            update_db(&update.db_path, &path).unwrap();
         }
         Args::UpdateDDM(ddm_update) => {
             let path = Path::new(&ddm_update.ddm_file);
