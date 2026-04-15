@@ -13,9 +13,6 @@ pub fn update_db(db_path: &Path, path: &Path) -> Result<(), DatabaseError> {
     let mut conn = Connection::open(db_path)?;
 
     let tx = conn.transaction()?;
-    if !path.is_file() {
-        return Err(DatabaseError::FileDoesNotExist);
-    }
 
     let path_strs = match path.is_dir() {
         true => {
@@ -35,17 +32,17 @@ pub fn update_db(db_path: &Path, path: &Path) -> Result<(), DatabaseError> {
     };
     for ele in path_strs {
         let count: i32 = tx.query_row(
-            "SELECT count(*) FROM file_store WHERE path == ?",
+            "SELECT count(*) FROM file_store WHERE path = ?",
             [ele.clone()],
             |row| row.get(0),
         )?;
         if count != 0 {
-            return Ok(());
+            continue;
         }
         tx.execute("INSERT INTO file_store VALUES (?)", [ele])?;
     }
 
-    let mut stmt = tx.prepare("SELECT path FROM file_store")?;
+    let mut stmt = tx.prepare("SELECT path FROM file_store ORDER BY path")?;
     let paths: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;

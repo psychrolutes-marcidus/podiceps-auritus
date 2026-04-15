@@ -1,6 +1,7 @@
 use std::{
     backtrace::Backtrace,
-    path::{Path, PathBuf}, process::exit,
+    path::{Path, PathBuf},
+    process::exit,
 };
 use thiserror::Error;
 
@@ -60,11 +61,12 @@ fn main() {
         }
         Args::UpdateDatabase(update) => {
             let path = match update.import_file.xor(update.import_directory) {
-                            Some(p) => {p},
-                            None => {
-                                println!("A file OR a directory must be set")
-                                exit(1)},
-                        };
+                Some(p) => p,
+                None => {
+                    println!("A file OR a directory must be set");
+                    exit(1)
+                }
+            };
             update_db(&update.db_path, &path).unwrap();
         }
         Args::UpdateDDM(ddm_update) => {
