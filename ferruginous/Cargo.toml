@@ -11,6 +11,7 @@ lto = true
 strip = true
 
 [dependencies]
+algorithms = { workspace = true }
 duckdb = { version = "1.10500.0", features = ["loadable-extension", "vscalar"]}
 chrono = { workspace = true }
 linesonmaps = { workspace = true }

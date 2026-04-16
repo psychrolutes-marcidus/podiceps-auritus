@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "fafo", "tileheater", "ferruginous", "etl"]
+members = ["algorithms", "linesonmaps", "segment_experiment","data", "solomon", "tilerizer", "modeling", "fafo", "ferruginous", "etl"]
 
 [profile.release]
 lto = true
@@ -38,6 +38,10 @@ duckdb = { version = "1.10500.0", features = ["bundled", "modern-full"]}
 rust_decimal = "1.40.0"
 clap = { version = "4.5.60", features = ["derive"] }
 thiserror = "2.0.18"
+nalgebra = "0.34.1"
 geo = "0.31.0"
 itertools = "0.14.0"
 fafo = { path = "fafo" }
+algorithms = { path = "algorithms" }
+cached = "0.59.0"
+approx = "0.5.1"

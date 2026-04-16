@@ -2,19 +2,18 @@ use std::error::Error;
 
 use chrono::DateTime;
 use duckdb::{
-    Connection,
     core::{LogicalTypeHandle, LogicalTypeId},
     vscalar::{ScalarFunctionSignature, VScalar},
+    Connection,
 };
 use fafo::{
-    ErrorMeasurementConf, cells_relative_coverage_by_polygon,
-    line_error_relative_to_perfect_and_centroid, util::ground_truth_to_cell_centroid_geodesic,
-    xyzcell::Cell,
+    cells_relative_coverage_by_polygon, line_error_relative_to_perfect_and_centroid,
+    util::ground_truth_to_cell_centroid_geodesic, xyzcell::Cell, ErrorMeasurementConf,
 };
 use linesonmaps::types::{coordm::CoordM, linem::LineM, pointm::PointM};
-use modeling::modeling::{LineTriangle, line_to_triangle_pair};
+use modeling::modeling::{line_to_triangle_pair, LineTriangle};
 use tilerizer::{
-    PointWTime, Zoom, draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle,
+    draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle, PointWTime, Zoom,
 };
 
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
@@ -23,7 +22,7 @@ pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
 }
 
 enum RenderMethod {
-    Dim(LineTriangle<4326>, LineTriangle<4326>),
+    Polygon(LineTriangle<4326>, LineTriangle<4326>),
     Line(PointM<4326>, PointM<4326>),
     Point(PointM<4326>),
 }
@@ -191,7 +190,7 @@ impl VScalar for RenderGeom {
                         let mut points = draw_line_triangle(&tri1, sam_lev);
                         let points2 = draw_line_triangle(&tri2, sam_lev);
                         points.extend_from_slice(&points2);
-                        return (points, RenderMethod::Dim(tri1, tri2));
+                        return (points, RenderMethod::Polygon(tri1, tri2));
                     }
                     let points = enhance_point(
                         draw_line(from_point_grid, to_point_grid),
@@ -237,7 +236,7 @@ impl VScalar for RenderGeom {
                 // println!("Done recategorising broken lines");
 
                 match d.1 {
-                    RenderMethod::Dim(line_triangle, line_triangle1) => {
+                    RenderMethod::Polygon(line_triangle, line_triangle1) => {
                         // println!("Doing dim scoring");
                         let cov = cells_relative_coverage_by_polygon(
                             (&line_triangle, &line_triangle1),
