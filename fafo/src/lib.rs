@@ -128,8 +128,8 @@ impl ErrorMeasurementConf {
                 }
             }
             ErrorMeasurementMethod::Geodesic => {
-                let first = util::ground_truth_to_cell_centroid_geodesic(f, gp, self.zoom);
-                let second = util::ground_truth_to_cell_centroid_geodesic(s, gp, self.zoom);
+                let first = util::ground_truth_to_cell_centroid_geodesic(f, gp);
+                let second = util::ground_truth_to_cell_centroid_geodesic(s, gp);
                 let min = first.min(second);
                 (*gp, min)
             }
@@ -163,7 +163,7 @@ impl ErrorMeasurementConf {
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0) as f64,
             ErrorMeasurementMethod::Geodesic => gt
-                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, gp, self.zoom))
+                .map(|p| util::ground_truth_to_cell_centroid_geodesic(p, gp))
                 .min_by(|x, y| x.total_cmp(y))
                 .unwrap_or(0.0),
         }
@@ -274,10 +274,10 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         mlp.0[0].geodesic_area_signed(),
         "input triangles are not perfectly adjacent"
     );
-    let polygon = mlp
-        .0
-        .pop()
-        .expect("union operation should yield a single polygon");
+    let polygon = match mlp.0.pop() {
+        Some(e) => e,
+        None => return gp.map(|x| (x, 1.)).collect(),
+    };
     gp.map(|c| (c, util::cell_to_polygon(c)))
         .map(|(c, gpoly)| {
             (

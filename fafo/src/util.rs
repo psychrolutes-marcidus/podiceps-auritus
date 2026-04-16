@@ -127,10 +127,9 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
     poly
 }
 
-pub(crate) fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
+pub fn ground_truth_to_cell_centroid_geodesic<P: Into<Point<f64>>>(
     p: P,
     gp: &xyzcell::Cell,
-    _zoom: u8,
 ) -> f64 {
     Geodesic.distance(grid_centroid_to_lon_lat(*gp, gp.z as u8), p.into())
 }
