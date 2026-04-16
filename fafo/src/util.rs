@@ -110,14 +110,13 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         .atan()
         * (180_f64 / f64::consts::PI);
 
-    let mut ps = LineString::from(vec![
-        (lon, lat_1),   // NW
-        (lon, lat),     // SW
-        (lon_1, lat),   // SE
-        (lon_1, lat_1), // NE
-        (lon, lat_1),   // NW /* remember to close the polygon */
-    ]);
-    ps.make_ccw_winding();
+    let ps = LineString::from(vec![
+(lon, lat),     // NW
+(lon, lat_1),   // SW
+(lon_1, lat_1), // SE
+(lon_1, lat),   // NE
+(lon, lat),   // NW /* remember to close the polygon */
+]);
     debug_assert!(ps.is_ccw_convex(), "{ps:?}");
 
     let poly = Polygon::new(ps, vec![]);
