@@ -36,7 +36,7 @@ struct Update {
     db_path: PathBuf,
     #[arg(short, long)]
     import_file: Option<PathBuf>,
-    #[arg(short, long)]
+    #[arg(long)]
     import_directory: Option<PathBuf>,
 }
 
