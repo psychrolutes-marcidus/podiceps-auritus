@@ -2,18 +2,19 @@ use std::error::Error;
 
 use chrono::DateTime;
 use duckdb::{
+    Connection,
     core::{LogicalTypeHandle, LogicalTypeId},
     vscalar::{ScalarFunctionSignature, VScalar},
-    Connection,
 };
 use fafo::{
-    cells_relative_coverage_by_polygon, line_error_relative_to_perfect_and_centroid,
-    util::ground_truth_to_cell_centroid_geodesic, xyzcell::Cell, ErrorMeasurementConf,
+    ErrorMeasurementConf, cells_relative_coverage_by_polygon,
+    line_error_relative_to_perfect_and_centroid, util::ground_truth_to_cell_centroid_geodesic,
+    xyzcell::Cell,
 };
 use linesonmaps::types::{coordm::CoordM, linem::LineM, pointm::PointM};
-use modeling::modeling::{line_to_triangle_pair, LineTriangle};
+use modeling::modeling::{LineTriangle, line_to_triangle_pair};
 use tilerizer::{
-    draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle, PointWTime, Zoom,
+    PointWTime, Zoom, draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle,
 };
 
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
@@ -281,9 +282,7 @@ impl VScalar for RenderGeom {
                 }
             })
             .inspect(|x| {
-                // println!("Done scoring cells");
                 lengths.push(x.len());
-                // println!("Starting output");
             });
         let ((((((x, y), z), tb), te), cov), dist): (
             (((((Vec<_>, Vec<_>), Vec<_>), Vec<_>), Vec<_>), Vec<_>),
@@ -310,9 +309,9 @@ impl VScalar for RenderGeom {
                                 ),
                                 time_end.timestamp_millis() as f64 / 1000.,
                             ),
-                            cov,
+                            cov as f32,
                         ),
-                        dist,
+                        1. - (dist as f32 / 500.),
                     )
                 },
             )
@@ -378,10 +377,10 @@ impl VScalar for RenderGeom {
             ("z", LogicalTypeHandle::from(LogicalTypeId::Integer)),
             ("time_start", LogicalTypeHandle::from(LogicalTypeId::Double)),
             ("time_end", LogicalTypeHandle::from(LogicalTypeId::Double)),
-            ("d_to_ais", LogicalTypeHandle::from(LogicalTypeId::Double)),
+            ("d_to_ais", LogicalTypeHandle::from(LogicalTypeId::Float)),
             (
                 "cell_covered",
-                LogicalTypeHandle::from(LogicalTypeId::Double),
+                LogicalTypeHandle::from(LogicalTypeId::Float),
             ),
         ];
 

@@ -1,6 +1,6 @@
+use algorithms::cell::MinmaxBounds;
 use algorithms::cell::judweight_depth;
 use algorithms::cell::relative_to_bounds;
-use algorithms::cell::MinmaxBounds;
 use geo::Distance;
 use itertools::izip;
 use linesonmaps::algo::segmenter::segment_timestamp;
@@ -9,9 +9,9 @@ use linesonmaps::types::pointm::PointM;
 use std::error::Error;
 
 use duckdb::{
+    Connection,
     core::{LogicalTypeHandle, LogicalTypeId},
     vscalar::{ScalarFunctionSignature, VScalar},
-    Connection,
 };
 
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
@@ -60,7 +60,7 @@ impl VScalar for DDMReliability {
                     relative_to_bounds(age_bounds, y as f64),
                 )
             })
-            .map(|(s, y)| weight[0] * s + (weight[1] * y).max(0.).min(1.))
+            .map(|(s, y)| weight[0] as f64 * s + (weight[1] as f64 * y).max(0.).min(1.))
             .collect();
 
         let mut out = output.flat_vector();

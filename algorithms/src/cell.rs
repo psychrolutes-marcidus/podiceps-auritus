@@ -12,10 +12,10 @@ where
     pub min: T,
     pub max: T,
 }
-const TOL: f64 = 1e-6;
+const TOL: f32 = 1e-6;
 
 #[once]
-pub fn judweight_vessel() -> Vec<f64> {
+pub fn judweight_vessel() -> [f32; 6] {
     let eig_val = vector![0., 1., 2., 3., 4., 5.];
     let a12 = 2.;
     let a13 = 5.;
@@ -40,9 +40,10 @@ pub fn judweight_vessel() -> Vec<f64> {
 }
 
 fn power<const P: usize>(
-    mut eig_val: Matrix<f64, Const<P>, Const<1>, ArrayStorage<f64, P, 1>>,
-    mat: Matrix<f64, Const<P>, Const<P>, ArrayStorage<f64, P, P>>,
-) -> Vec<f64> {
+    mut eig_val: Matrix<f32, Const<P>, Const<1>, ArrayStorage<f32, P, 1>>,
+    mat: Matrix<f32, Const<P>, Const<P>, ArrayStorage<f32, P, P>>,
+) -> [f32; P] {
+    let mut output: [f32; P] = [0.; P];
     let mut prev_eig_val = eig_val.clone();
     loop {
         let new_eig_val = mat * eig_val;
@@ -56,11 +57,16 @@ fn power<const P: usize>(
     }
     let sum = eig_val.sum();
     let norm_vec = eig_val.scale(1. / sum);
-    norm_vec.iter().cloned().collect::<Vec<f64>>()
+    norm_vec
+        .iter()
+        .cloned()
+        .enumerate()
+        .for_each(|(i, v)| output[i] = v);
+    output
 }
 
 #[once]
-pub fn judweight_depth() -> Vec<f64> {
+pub fn judweight_depth() -> [f32; 2] {
     let eig_val = vector![0., 1.];
     let a12 = 3.;
     let mat = matrix![1., a12; 1. / a12, 1.];
@@ -76,13 +82,33 @@ where
     (num - bounds.min) / (bounds.max - bounds.min)
 }
 
+pub fn gravity_model(
+    rel_m: f32,
+    draught_m: f32,
+    dev_m: f32,
+    rel_o: f32,
+    draught_o: f32,
+    dev_o: f32,
+) -> f32 {
+    let diff = draught_m - draught_o;
+    let rel = rel_m * rel_o;
+    let dev = dev_m * dev_o;
+    if diff < 1. {
+        (rel) / (dev)
+    } else if diff < 2. {
+        (rel) / (dev * (diff).powi(2))
+    } else {
+        (rel) / (4. * dev)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn gives_result() {
-        let vec: [f64; 2] = judweight_depth().as_array().unwrap().to_owned();
+        let vec: [f32; 2] = judweight_depth().as_array().unwrap().to_owned();
         let source_bounds = MinmaxBounds { min: 0., max: 7. };
         let age_bounds = MinmaxBounds {
             min: 2000.,
