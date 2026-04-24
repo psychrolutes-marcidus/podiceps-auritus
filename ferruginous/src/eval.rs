@@ -138,81 +138,112 @@ impl VScalar for CombineCell {
         output: &mut dyn duckdb::vtab::arrow::WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let input_len = input.len();
-        let draught_val = input.list_vector(0);
-        let draught_flat = draught_val.child(draught_val.len());
-        let draught_s: &[f32] = draught_flat.as_slice_with_len(draught_val.len());
-        let draught_s = (0..input_len)
-            .map(|x| draught_val.get_entry(x))
-            .map(|(off, len)| &draught_s[off..off + len]);
-        let score_val = input.list_vector(1);
-        let score_flat = score_val.child(score_val.len());
-        let score_s: &[f32] = score_flat.as_slice_with_len(score_val.len());
-        let score_s = (0..input_len)
-            .map(|x| score_val.get_entry(x))
-            .map(|(off, len)| &score_s[off..off + len]);
-        let std_val = input.list_vector(2);
-        let std_flat = std_val.child(std_val.len());
-        let std_s: &[f32] = std_flat.as_slice_with_len(std_val.len());
-        let std_s = (0..input_len)
-            .map(|x| std_val.get_entry(x))
-            .map(|(off, len)| &std_s[off..off + len]);
+        let draught_max_flat = input.flat_vector(0);
+        let draught_max_s: &[f32] = draught_max_flat.as_slice_with_len(input_len);
+        let draught_max_s = draught_max_s
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| match draught_max_flat.row_is_null(i as u64) {
+                true => None,
+                false => Some(v),
+            });
+        let score_max_flat = input.flat_vector(1);
+        let score_max_s: &[f32] = score_max_flat.as_slice_with_len(input_len);
+        let score_max_s = score_max_s.iter().enumerate().map(|(i, &v)| {
+            match score_max_flat.row_is_null(i as u64) {
+                true => None,
+                false => Some(v),
+            }
+        });
+        let std_max_flat = input.flat_vector(2);
+        let std_max_s: &[f32] = std_max_flat.as_slice_with_len(input_len);
+        let std_max_s =
+            std_max_s
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| match std_max_flat.row_is_null(i as u64) {
+                    true => None,
+                    false => {
+                        if v == 0. {
+                            return None;
+                        }
+                        Some(v)
+                    }
+                });
+        let draught_other_flat = input.flat_vector(3);
+        let draught_other_s: &[f32] = draught_other_flat.as_slice_with_len(input_len);
+        let draught_other_s = draught_other_s.iter().enumerate().map(|(i, &v)| {
+            match draught_other_flat.row_is_null(i as u64) {
+                true => None,
+                false => Some(v),
+            }
+        });
+        let score_other_flat = input.flat_vector(4);
+        let score_other_s: &[f32] = score_other_flat.as_slice_with_len(input_len);
+        let score_other_s = score_other_s
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| match score_other_flat.row_is_null(i as u64) {
+                true => None,
+                false => Some(v),
+            });
+        let std_other_flat = input.flat_vector(5);
+        let std_other_s: &[f32] = std_other_flat.as_slice_with_len(input_len);
+        let std_other_s = std_other_s.iter().enumerate().map(|(i, &v)| {
+            match std_other_flat.row_is_null(i as u64) {
+                true => None,
+                false => {
+                    if v == 0. {
+                        return None;
+                    }
+                    Some(v)
+                }
+            }
+        });
 
-        let (draught, score): (Vec<_>, Vec<_>) = draught_s
-            .zip(score_s)
-            .zip(std_s)
-            .map(|((d, s), std)| {
-                let ((d, s), std): ((Vec<f32>, Vec<f32>), Vec<f32>) = d
-                    .iter()
-                    .zip(s.iter())
-                    .zip(std.iter())
-                    .sorted_by(|a, b| a.0.0.total_cmp(b.0.0))
-                    .rev()
-                    .unzip();
-                combine_cell(&d, &s, &std, 0.53)
+        let result: Vec<_> = draught_max_s
+            .zip(score_max_s)
+            .zip(std_max_s)
+            .zip(draught_other_s.zip(score_other_s).zip(std_other_s))
+            .map(|(((d_m, s_m), dev_m), ((d_o, s_o), dev_o))| {
+                d_m.zip(s_m)
+                    .zip(dev_m)
+                    .zip(d_o.zip(s_o).zip(dev_o))
+                    .map(|(m, o)| combine_cell([m.0.0, o.0.0], [m.0.1, o.0.1], [m.1, o.1]))
+                    .unwrap_or_default()
             })
-            .unzip();
+            .collect();
 
-        let out_struct = output.struct_vector();
-        let mut draught_out = out_struct.child(0, input_len);
-        let mut reliability_out = out_struct.child(1, input_len);
-        draught_out.copy(&draught);
-        reliability_out.copy(&score);
+        let mut output_vec = output.flat_vector();
+        output_vec.copy(&result);
 
         Ok(())
     }
 
     fn signatures() -> Vec<ScalarFunctionSignature> {
         let params = vec![
-            LogicalTypeHandle::list(&LogicalTypeHandle::from(LogicalTypeId::Float)), // Draught values
-            LogicalTypeHandle::list(&LogicalTypeHandle::from(LogicalTypeId::Float)), // Score values
-            LogicalTypeHandle::list(&LogicalTypeHandle::from(LogicalTypeId::Float)), // Standard deviation on draught values
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Draught max
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Score max
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Dev max
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Draught other
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Score other
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Dev other
         ];
 
-        let out_struct = [
-            ("draught", LogicalTypeHandle::from(LogicalTypeId::Float)),
-            ("reliability", LogicalTypeHandle::from(LogicalTypeId::Float)),
-        ];
-
-        let return_type = LogicalTypeHandle::struct_type(&out_struct);
-        vec![ScalarFunctionSignature::exact(params, return_type)]
+        vec![ScalarFunctionSignature::exact(
+            params,
+            LogicalTypeHandle::from(LogicalTypeId::Float),
+        )]
     }
 }
 
-fn combine_cell(draught: &[f32], score: &[f32], deviation: &[f32], thres: f32) -> (f32, f32) {
-    if draught.len() == 0 {
-        return (0., 0.);
-    }
-    let output = draught
-        .iter()
-        .zip(score.iter())
-        .zip(deviation.iter())
-        .map(|((&d, &s), &std)| gravity_model(score[0], draught[0], deviation[0], s, d, std))
-        .max_by(|a, b| a.total_cmp(b))
-        .map(|x| (draught[0], x))
-        .unwrap_or((0., 0.));
-
-    if output.1 < thres {
-        return combine_cell(&draught[1..], &score[1..], &deviation[1..], thres);
-    }
-    return output;
+fn combine_cell(draught: [f32; 2], score: [f32; 2], deviation: [f32; 2]) -> f32 {
+    gravity_model(
+        score[0],
+        draught[0],
+        deviation[0],
+        score[1],
+        draught[1],
+        deviation[1],
+    )
 }

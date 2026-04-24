@@ -66,12 +66,7 @@ impl ErrorMeasurementConf {
         (f, s): (PointM<4326>, PointM<4326>),
         cells: Cells,
     ) -> Vec<CellWithError> {
-        let interpolated_cells = cells.filter(|p| {
-            !(p.coord == point_to_grid(f.coord.into(), self.zoom.into())
-                || p.coord == point_to_grid(s.coord.into(), self.zoom.into()))
-        });
-
-        interpolated_cells
+        cells
             .map(|ic| self.cell_to_nearest_ground_truth((f, s), &ic))
             .collect()
     }

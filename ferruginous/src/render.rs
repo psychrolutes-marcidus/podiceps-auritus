@@ -22,6 +22,7 @@ pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[derive(Debug)]
 enum RenderMethod {
     Polygon(LineTriangle<4326>, LineTriangle<4326>),
     Line(PointM<4326>, PointM<4326>),
@@ -38,11 +39,14 @@ impl VScalar for RenderGeom {
         input: &mut duckdb::core::DataChunkHandle,
         output: &mut dyn duckdb::vtab::arrow::WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // This is data preparation.
+        // In order to use the data in Rust it must first be transformed into Rust slices.
         let input_len = input.len();
         let from_point = input.struct_vector(0);
         let to_point = input.struct_vector(1);
         let dimensions = input.struct_vector(2);
         let metadata = input.struct_vector(3);
+        let scoring = input.struct_vector(4);
         let from_lon = from_point.child(0, input_len);
         let from_lat = from_point.child(1, input_len);
         let from_time = from_point.child(2, input_len);
@@ -163,6 +167,37 @@ impl VScalar for RenderGeom {
                 })
             });
 
+        // The scoring_parameters
+
+        let draught_dist_mmsi = scoring.child(0, input_len);
+        let draught_dist_type = scoring.child(1, input_len);
+        let draughts_null = scoring.child(2, input_len);
+        let r_squared = scoring.child(3, input_len);
+        let draught_dist_mmsi_s: &[f32] = draught_dist_mmsi.as_slice_with_len(input_len);
+        let draught_dist_type_s: &[f32] = draught_dist_type.as_slice_with_len(input_len);
+        let draughts_null_s: &[f32] = draughts_null.as_slice_with_len(input_len);
+        let r_squared_s: &[f32] = r_squared.as_slice_with_len(input_len);
+
+        let scoring_vals = draught_dist_mmsi_s
+            .iter()
+            .zip(draught_dist_type_s.iter())
+            .zip(draughts_null_s.iter())
+            .zip(r_squared_s.iter())
+            .enumerate()
+            .map(|(i, (((d_mmsi, d_type), nulls), r_sq))| {
+                if draught_dist_mmsi.row_is_null(i as u64)
+                    || draught_dist_type.row_is_null(i as u64)
+                    || draughts_null.row_is_null(i as u64)
+                    || r_squared.row_is_null(i as u64)
+                {
+                    return None;
+                }
+                return Some((d_mmsi, d_type, nulls, r_sq));
+            });
+
+        let weights = algorithms::cell::judweight_vessel();
+        // Here the actual computation starts
+
         let mut lengths: Vec<usize> = Vec::with_capacity(input_len);
 
         let data = from_point
@@ -233,8 +268,6 @@ impl VScalar for RenderGeom {
                     .method(fafo::ErrorMeasurementMethod::Geodesic)
                     .zoom(s as u8)
                     .build();
-                // println!("Entering line recategorising");
-                // println!("Done recategorising broken lines");
 
                 match d.1 {
                     RenderMethod::Polygon(line_triangle, line_triangle1) => {
@@ -283,9 +316,25 @@ impl VScalar for RenderGeom {
             })
             .inspect(|x| {
                 lengths.push(x.len());
+            })
+            .zip(scoring_vals)
+            .map(|(cells, score_p)| match score_p {
+                Some(s) => cells
+                    .iter()
+                    .map(|x| {
+                        (
+                            x.0,
+                            mul_arr_sum(
+                                weights,
+                                [*s.0, *s.1, *s.2, *s.3, x.1 as f32, 1. - (x.2 as f32 / 500.)],
+                            ),
+                        )
+                    })
+                    .collect(),
+                None => cells.iter().map(|x| (x.0, 0.)).collect::<Vec<_>>(),
             });
-        let ((((((x, y), z), tb), te), cov), dist): (
-            (((((Vec<_>, Vec<_>), Vec<_>), Vec<_>), Vec<_>), Vec<_>),
+        let (((((x, y), z), tb), te), score): (
+            ((((Vec<_>, Vec<_>), Vec<_>), Vec<_>), Vec<_>),
             Vec<_>,
         ) = data
             .flatten()
@@ -297,21 +346,17 @@ impl VScalar for RenderGeom {
                         time_start,
                         time_end,
                     },
-                    cov,
-                    dist,
+                    score,
                 )| {
                     (
                         (
                             (
-                                (
-                                    ((point.x, point.y), z),
-                                    time_start.timestamp_millis() as f64 / 1000.,
-                                ),
-                                time_end.timestamp_millis() as f64 / 1000.,
+                                ((point.x, point.y), z),
+                                time_start.timestamp_millis() as f64 / 1000.,
                             ),
-                            cov as f32,
+                            time_end.timestamp_millis() as f64 / 1000.,
                         ),
-                        1. - (dist as f32 / 500.),
+                        score,
                     )
                 },
             )
@@ -323,15 +368,13 @@ impl VScalar for RenderGeom {
         let mut z_out = struct_out.child(2, z.len());
         let mut time_begin_out = struct_out.child(3, tb.len());
         let mut time_end_out = struct_out.child(4, te.len());
-        let mut d_to_ais = struct_out.child(5, dist.len());
-        let mut cell_covered = struct_out.child(6, cov.len());
+        let mut score_out = struct_out.child(5, score.len());
         x_out.copy(&x);
         y_out.copy(&y);
         z_out.copy(&z);
         time_begin_out.copy(&tb);
         time_end_out.copy(&te);
-        d_to_ais.copy(&dist);
-        cell_covered.copy(&cov);
+        score_out.copy(&score);
         lengths.iter().fold((0, 0), |acc, &x| {
             list_out.set_entry(acc.0, acc.1, x);
             (acc.0 + 1, acc.1 + x)
@@ -343,8 +386,7 @@ impl VScalar for RenderGeom {
             drop(z);
             drop(tb);
             drop(te);
-            drop(dist);
-            drop(cov);
+            drop(score);
         });
         Ok(())
     }
@@ -371,17 +413,28 @@ impl VScalar for RenderGeom {
                 LogicalTypeHandle::from(LogicalTypeId::UTinyint),
             ),
         ];
+        let scoring_params = [
+            (
+                "draught_dist_mmsi",
+                LogicalTypeHandle::from(LogicalTypeId::Float),
+            ),
+            (
+                "draught_dist_type",
+                LogicalTypeHandle::from(LogicalTypeId::Float),
+            ),
+            (
+                "draughts_null",
+                LogicalTypeHandle::from(LogicalTypeId::Float),
+            ),
+            ("r_squared", LogicalTypeHandle::from(LogicalTypeId::Float)),
+        ];
         let output_data = [
             ("x", LogicalTypeHandle::from(LogicalTypeId::Integer)),
             ("y", LogicalTypeHandle::from(LogicalTypeId::Integer)),
             ("z", LogicalTypeHandle::from(LogicalTypeId::Integer)),
             ("time_start", LogicalTypeHandle::from(LogicalTypeId::Double)),
             ("time_end", LogicalTypeHandle::from(LogicalTypeId::Double)),
-            ("d_to_ais", LogicalTypeHandle::from(LogicalTypeId::Float)),
-            (
-                "cell_covered",
-                LogicalTypeHandle::from(LogicalTypeId::Float),
-            ),
+            ("score", LogicalTypeHandle::from(LogicalTypeId::Float)),
         ];
 
         let params = vec![
@@ -389,8 +442,13 @@ impl VScalar for RenderGeom {
             LogicalTypeHandle::struct_type(&point),
             LogicalTypeHandle::struct_type(&dimensions),
             LogicalTypeHandle::struct_type(&metadata),
+            LogicalTypeHandle::struct_type(&scoring_params),
         ];
         let output = LogicalTypeHandle::list(&LogicalTypeHandle::struct_type(&output_data));
         vec![ScalarFunctionSignature::exact(params, output)]
     }
+}
+
+fn mul_arr_sum<const N: usize>(a: [f32; N], b: [f32; N]) -> f32 {
+    a.iter().zip(b.iter()).map(|(&a, &b)| a * b).sum()
 }
