@@ -31,11 +31,11 @@ impl<const CRS: u64> LineTriangle<CRS> {
 
         let b_start_m = DateTime::<Utc>::from_timestamp_secs(self.line.start().m as i64)
             .expect("error ;(")
-            - vessel_speed(&self.line, self.b, line_meters); // The time when a ship transponder reached the start edge of its ship polygon: polygon.line.from.m = line.from.m - (how long it takes the ship to travel 'b' distance)
+            - time_to_travel_distance(&self.line, self.b, line_meters); // The time when a ship transponder reached the start edge of its ship polygon: polygon.line.from.m = line.from.m - (how long it takes the ship to travel 'b' distance)
 
         let a_end_m = DateTime::<Utc>::from_timestamp_secs(self.line.end().m as i64)
             .expect("error ;(")
-            + vessel_speed(&self.line, self.a, line_meters); // The time when a ship transponder reached the end edge of its ship polygon: polygon.line.to.m = line.to.m + (how long it takes the ship to travel 'a' distance)
+            + time_to_travel_distance(&self.line, self.a, line_meters); // The time when a ship transponder reached the end edge of its ship polygon: polygon.line.to.m = line.to.m + (how long it takes the ship to travel 'a' distance)
 
         let probe_m = probe_timestamp(
             b_start_m.timestamp() as f64,
@@ -157,7 +157,7 @@ pub fn probe_timestamp(start_m: f64, delta_m: f64, ratio: f64) -> DateTime<Utc> 
         .expect("ratio er fucked")
 }
 
-pub fn vessel_speed<const CRS: u64>(
+pub fn time_to_travel_distance<const CRS: u64>(
     line: &LineM<CRS>,
     distance: f64,
     line_meters: f64,
