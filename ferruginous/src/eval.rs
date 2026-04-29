@@ -155,21 +155,19 @@ impl VScalar for CombineCell {
                 false => Some(v),
             }
         });
-        let std_max_flat = input.flat_vector(2);
-        let std_max_s: &[f32] = std_max_flat.as_slice_with_len(input_len);
-        let std_max_s =
-            std_max_s
-                .iter()
-                .enumerate()
-                .map(|(i, &v)| match std_max_flat.row_is_null(i as u64) {
-                    true => None,
-                    false => {
-                        if v == 0. {
-                            return None;
-                        }
-                        Some(v)
+        let med_dr_max_flat = input.flat_vector(2);
+        let med_dr_max_s: &[f32] = med_dr_max_flat.as_slice_with_len(input_len);
+        let med_dr_max_s = med_dr_max_s.iter().enumerate().map(|(i, &v)| {
+            match med_dr_max_flat.row_is_null(i as u64) {
+                true => None,
+                false => {
+                    if v == 0. {
+                        return None;
                     }
-                });
+                    Some(v)
+                }
+            }
+        });
         let draught_other_flat = input.flat_vector(3);
         let draught_other_s: &[f32] = draught_other_flat.as_slice_with_len(input_len);
         let draught_other_s = draught_other_s.iter().enumerate().map(|(i, &v)| {
@@ -187,24 +185,25 @@ impl VScalar for CombineCell {
                 true => None,
                 false => Some(v),
             });
-        let std_other_flat = input.flat_vector(5);
-        let std_other_s: &[f32] = std_other_flat.as_slice_with_len(input_len);
-        let std_other_s = std_other_s.iter().enumerate().map(|(i, &v)| {
-            match std_other_flat.row_is_null(i as u64) {
-                true => None,
-                false => {
-                    if v == 0. {
-                        return None;
+        let med_dr_other_flat = input.flat_vector(5);
+        let med_dr_other_s: &[f32] = med_dr_other_flat.as_slice_with_len(input_len);
+        let med_dr_other_s =
+            med_dr_other_s.iter().enumerate().map(|(i, &v)| {
+                match med_dr_other_flat.row_is_null(i as u64) {
+                    true => None,
+                    false => {
+                        if v == 0. {
+                            return None;
+                        }
+                        Some(v)
                     }
-                    Some(v)
                 }
-            }
-        });
+            });
 
         let result: Vec<_> = draught_max_s
             .zip(score_max_s)
-            .zip(std_max_s)
-            .zip(draught_other_s.zip(score_other_s).zip(std_other_s))
+            .zip(med_dr_max_s)
+            .zip(draught_other_s.zip(score_other_s).zip(med_dr_other_s))
             .map(|(((d_m, s_m), dev_m), ((d_o, s_o), dev_o))| {
                 d_m.zip(s_m)
                     .zip(dev_m)
@@ -224,10 +223,10 @@ impl VScalar for CombineCell {
         let params = vec![
             LogicalTypeHandle::from(LogicalTypeId::Float), // Draught max
             LogicalTypeHandle::from(LogicalTypeId::Float), // Score max
-            LogicalTypeHandle::from(LogicalTypeId::Float), // Dev max
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Median draught max
             LogicalTypeHandle::from(LogicalTypeId::Float), // Draught other
             LogicalTypeHandle::from(LogicalTypeId::Float), // Score other
-            LogicalTypeHandle::from(LogicalTypeId::Float), // Dev other
+            LogicalTypeHandle::from(LogicalTypeId::Float), // Median draught other
         ];
 
         vec![ScalarFunctionSignature::exact(

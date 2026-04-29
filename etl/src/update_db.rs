@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use sysinfo::System;
 
 use crate::DatabaseError;
-use duckdb::{params, Connection, Transaction};
+use duckdb::{Connection, Transaction, params};
 use geo::Distance;
 use linesonmaps::{
     algo::segmenter::segment_timestamp,

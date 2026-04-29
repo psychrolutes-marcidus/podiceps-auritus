@@ -92,16 +92,24 @@ pub fn gravity_model(
 ) -> f32 {
     let diff = draught_m - draught_o;
     let rel = rel_m * rel_o;
-    let dev = dev_m * dev_o;
-    if diff < 1. {
-        (rel) / (dev)
-    } else if diff < 2. {
-        (rel) / (dev * (diff).powi(2))
-    } else {
-        (rel) / (4. * dev)
-    }
+    let dr_m = draught_dev(draught_m, dev_m);
+    let dr_o = draught_dev(draught_o, dev_o);
+    let _dev = dr_m * dr_o;
+    let n = diff;
+    // if diff < 1. {
+    //     (rel) / (dev)
+    // } else if diff < 2. {
+    //     (rel) / (dev * (diff).powi(2))
+    // } else {
+    //     (rel) / (4. * dev)
+    // }
+
+    rel / (n + 1.)
 }
 
+fn draught_dev(draught: f32, med: f32) -> f32 {
+    (draught - med).abs() / med
+}
 #[cfg(test)]
 mod tests {
     use super::*;
