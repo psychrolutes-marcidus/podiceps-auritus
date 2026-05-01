@@ -284,7 +284,7 @@ impl VScalar for RenderGeom {
                             .zip(dist.iter())
                             .map(|(cov, dist)| (cov.1, dist.1))
                             .zip(reduced_points.iter())
-                            .map(|((cov, dist), &point)| (point, cov, dist))
+                            .map(|((cov, dist), &point)| (point, cov, 1. - (dist / 500.)))
                             .collect::<Vec<_>>()
                     }
                     RenderMethod::Line(point_m, point_m1) => {
@@ -298,7 +298,7 @@ impl VScalar for RenderGeom {
                             .zip(dist.iter())
                             .map(|(cov, dist)| (cov.1, dist.1))
                             .zip(reduced_points.iter())
-                            .map(|((cov, dist), &point)| (point, cov, dist))
+                            .map(|((cov, dist), &point)| (point, cov, 1. - (dist / 500.)))
                             .collect::<Vec<_>>()
                     }
                     RenderMethod::Point(point_m) => {
@@ -308,7 +308,12 @@ impl VScalar for RenderGeom {
                             .iter()
                             .zip(cells())
                             .map(|(&x, c)| {
-                                (x, cov, ground_truth_to_cell_centroid_geodesic(point_m, &c))
+                                (
+                                    x,
+                                    cov,
+                                    1. - (ground_truth_to_cell_centroid_geodesic(point_m, &c)
+                                        / 500.),
+                                )
                             })
                             .collect::<Vec<_>>()
                     }
@@ -321,13 +326,18 @@ impl VScalar for RenderGeom {
             .map(|(cells, score_p)| match score_p {
                 Some(s) => cells
                     .iter()
+                    .inspect(|x| {
+                        if x.1 > 1.1 || x.1 < 0. {
+                            dbg!(&x.1);
+                        }
+                        if x.2 > 1.1 || x.1 < 0. {
+                            dbg!(&x.2);
+                        }
+                    })
                     .map(|x| {
                         (
                             x.0,
-                            mul_arr_sum(
-                                weights,
-                                [*s.0, *s.1, *s.2, *s.3, x.1 as f32, 1. - (x.2 as f32 / 500.)],
-                            ),
+                            mul_arr_sum(weights, [*s.0, *s.1, *s.2, *s.3, x.1 as f32, x.2 as f32]),
                         )
                     })
                     .collect(),
