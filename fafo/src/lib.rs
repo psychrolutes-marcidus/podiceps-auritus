@@ -321,7 +321,7 @@ pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcel
             // entire line is covered by polygon
             (c, cent_ratio.clamp(0.0, 1.0))
         } else {
-            (c, (cent_ratio * line_length_to_perfect).clamp(0.0, 0.0))
+            (c, (cent_ratio * line_length_to_perfect).clamp(0.0, 1.0))
         }
     });
     i.collect()
