@@ -284,7 +284,7 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
                 c,
                 (gpoly.intersection(&polygon).geodesic_area_unsigned()
                     / gpoly.geodesic_area_unsigned())
-                .clamp(0.0, 0.0),
+                .clamp(0.0, 1.0),
             )
         })
         .collect()
