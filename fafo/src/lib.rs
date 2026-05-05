@@ -284,6 +284,33 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         .collect()
 }
 
+/// only works if the triangle pair form a polygon
+pub fn triangle_pair_to_polygon(
+    rectangle: (&LineTriangle<4326>, &LineTriangle<4326>),
+) -> geo::Polygon {
+    debug_assert!(
+        rectangle
+            .0
+            .triangle
+            .to_polygon()
+            .relate(&rectangle.1.triangle.to_polygon())
+            .is_touches(),
+        "input triangles should form a rectangle"
+    );
+    let mut mlp = rectangle
+        .0
+        .triangle
+        .to_polygon()
+        .union(&rectangle.1.triangle.to_polygon());
+    debug_assert_eq!(
+        mlp.convex_hull().geodesic_area_signed(),
+        mlp.0[0].geodesic_area_signed(),
+        "input triangles are not perfectly adjacent"
+    );
+    let p = mlp.0[0].to_owned();
+    p
+}
+
 pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcell::Cell>>(
     (f, s): (PointM<4326>, PointM<4326>),
     cells: Cells,
