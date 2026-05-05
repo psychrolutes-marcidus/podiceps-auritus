@@ -19,6 +19,7 @@ use tilerizer::{
 
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
     con.register_scalar_function::<RenderGeom>("render_geom")?;
+    con.register_scalar_function::<Polyganize>("polyganize")?;
     Ok(())
 }
 
@@ -461,4 +462,99 @@ impl VScalar for RenderGeom {
 
 fn mul_arr_sum<const N: usize>(a: [f32; N], b: [f32; N]) -> f32 {
     a.iter().zip(b.iter()).map(|(&a, &b)| a * b).sum()
+}
+
+struct Polyganize;
+
+impl VScalar for Polyganize {
+    type State = ();
+
+    unsafe fn invoke(
+        _state: &Self::State,
+        input: &mut duckdb::core::DataChunkHandle,
+        _output: &mut dyn duckdb::vtab::arrow::WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let input_len = input.len();
+        let from_point = input.struct_vector(0);
+        let to_point = input.struct_vector(1);
+        let dimensions = input.struct_vector(2);
+
+        let from_lon = from_point.child(0, input_len);
+        let from_lat = from_point.child(1, input_len);
+        let from_time = from_point.child(2, input_len);
+        let from_lon_s: &[f32] = from_lon.as_slice_with_len(input_len);
+        let from_lat_s: &[f32] = from_lat.as_slice_with_len(input_len);
+        let from_time_s: &[f64] = from_time.as_slice_with_len(input_len);
+        let to_lon = to_point.child(0, input_len);
+        let to_lat = to_point.child(1, input_len);
+        let to_time = to_point.child(2, input_len);
+        let to_lon_s: &[f32] = to_lon.as_slice_with_len(input_len);
+        let to_lat_s: &[f32] = to_lat.as_slice_with_len(input_len);
+        let to_time_s: &[f64] = to_time.as_slice_with_len(input_len);
+
+        let to_bow = dimensions.child(0, input_len);
+        let to_starboard = dimensions.child(1, input_len);
+        let to_stern = dimensions.child(2, input_len);
+        let to_port = dimensions.child(3, input_len);
+
+        let to_bow_s: &[f32] = to_bow.as_slice_with_len(input_len);
+        let to_starboard_s: &[f32] = to_starboard.as_slice_with_len(input_len);
+        let to_stern_s: &[f32] = to_stern.as_slice_with_len(input_len);
+        let to_port_s: &[f32] = to_port.as_slice_with_len(input_len);
+
+        let from_point = point_zipper(from_lon_s, from_lat_s, from_time_s);
+        let to_point = point_zipper(to_lon_s, to_lat_s, to_time_s);
+
+        let dimensions = to_bow_s
+            .iter()
+            .zip(to_starboard_s.iter())
+            .zip(to_stern_s.iter())
+            .zip(to_port_s.iter())
+            .map(|(((&b, &sa), &se), &p)| (b as f64, sa as f64, se as f64, p as f64));
+
+        let tri = from_point
+            .zip(to_point)
+            .zip(dimensions)
+            .map(|((f, t), d)| (f, t, d))
+            .map(|(f, t, d)| {
+                let line: LineM<4326> = LineM::from((f, t));
+                let (tri1, tri2) = line_to_triangle_pair(&line, d.0, d.1, d.2, d.3);
+            });
+        Ok(())
+    }
+
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        let point = [
+            ("lon", LogicalTypeHandle::from(LogicalTypeId::Float)),
+            ("lat", LogicalTypeHandle::from(LogicalTypeId::Float)),
+            ("time", LogicalTypeHandle::from(LogicalTypeId::Double)),
+        ];
+        let dimensions = [
+            ("to_bow", LogicalTypeHandle::from(LogicalTypeId::Float)),
+            (
+                "to_starboard",
+                LogicalTypeHandle::from(LogicalTypeId::Float),
+            ),
+            ("to_stern", LogicalTypeHandle::from(LogicalTypeId::Float)),
+            ("to_port", LogicalTypeHandle::from(LogicalTypeId::Float)),
+        ];
+        let params = vec![
+            LogicalTypeHandle::struct_type(&point),
+            LogicalTypeHandle::struct_type(&point),
+            LogicalTypeHandle::struct_type(&dimensions),
+        ];
+        let output = LogicalTypeHandle::from(LogicalTypeId::Blob);
+        vec![ScalarFunctionSignature::exact(params, output)]
+    }
+}
+
+fn point_zipper(lon: &[f32], lat: &[f32], time: &[f64]) -> impl Iterator<Item = CoordM<4326>> {
+    lon.iter()
+        .zip(lat.iter())
+        .zip(time.iter())
+        .map(|((&lon, &lat), &time)| CoordM::<4326> {
+            x: lon as f64,
+            y: lat as f64,
+            m: time,
+        })
 }
