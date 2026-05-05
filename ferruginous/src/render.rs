@@ -3,19 +3,20 @@ use std::error::Error;
 use chrono::DateTime;
 use duckdb::{
     Connection,
-    core::{LogicalTypeHandle, LogicalTypeId},
+    core::{Inserter, LogicalTypeHandle, LogicalTypeId},
     vscalar::{ScalarFunctionSignature, VScalar},
 };
 use fafo::{
     ErrorMeasurementConf, cells_relative_coverage_by_polygon,
-    line_error_relative_to_perfect_and_centroid, util::ground_truth_to_cell_centroid_geodesic,
-    xyzcell::Cell,
+    line_error_relative_to_perfect_and_centroid, triangle_pair_to_polygon,
+    util::ground_truth_to_cell_centroid_geodesic, xyzcell::Cell,
 };
 use linesonmaps::types::{coordm::CoordM, linem::LineM, pointm::PointM};
 use modeling::modeling::{LineTriangle, line_to_triangle_pair};
 use tilerizer::{
     PointWTime, Zoom, draw_line, enhance_point, point_to_grid, tile3d::draw_line_triangle,
 };
+use wkb::writer;
 
 pub fn extension_entrypoint(con: &Connection) -> Result<(), Box<dyn Error>> {
     con.register_scalar_function::<RenderGeom>("render_geom")?;
@@ -472,7 +473,7 @@ impl VScalar for Polyganize {
     unsafe fn invoke(
         _state: &Self::State,
         input: &mut duckdb::core::DataChunkHandle,
-        _output: &mut dyn duckdb::vtab::arrow::WritableVector,
+        output: &mut dyn duckdb::vtab::arrow::WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let input_len = input.len();
         let from_point = input.struct_vector(0);
@@ -512,14 +513,26 @@ impl VScalar for Polyganize {
             .zip(to_port_s.iter())
             .map(|(((&b, &sa), &se), &p)| (b as f64, sa as f64, se as f64, p as f64));
 
-        let tri = from_point
+        let flat_out = output.flat_vector();
+        from_point
             .zip(to_point)
             .zip(dimensions)
             .map(|((f, t), d)| (f, t, d))
             .map(|(f, t, d)| {
                 let line: LineM<4326> = LineM::from((f, t));
                 let (tri1, tri2) = line_to_triangle_pair(&line, d.0, d.1, d.2, d.3);
-            });
+                let poly = triangle_pair_to_polygon((&tri1, &tri2));
+                let mut buf: Vec<u8> = Vec::new();
+                let options = wkb::writer::WriteOptions {
+                    endianness: wkb::Endianness::LittleEndian,
+                };
+                writer::write_polygon(&mut buf, &poly, &options)
+                    .expect("Could not write polygon to WKB");
+                buf
+            })
+            .enumerate()
+            .for_each(|(i, v)| flat_out.insert(i, &v));
+
         Ok(())
     }
 

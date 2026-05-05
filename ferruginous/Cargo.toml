@@ -22,6 +22,7 @@ tilerizer = { workspace = true }
 modeling = { workspace = true }
 fafo = { workspace = true }
 rayon = { workspace = true }
+wkb = { workspace = true }
 
 
 [lints]
