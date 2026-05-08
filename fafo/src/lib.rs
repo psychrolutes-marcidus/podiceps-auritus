@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 use std::f64;
 
+use geo::dimensions::Dimensions;
 use geo::{
     BooleanOps as _, Centroid, ClosestPoint, ConvexHull, Distance, GeoNum, Geodesic, GeodesicArea,
-    Length, Line, Point, Relate,
+    HasDimensions, Length, Line, Point, Relate,
 };
 use linesonmaps::types::{linestringm::LineStringM, pointm::PointM};
 use modeling::modeling::LineTriangle;
@@ -288,6 +289,14 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
 pub fn triangle_pair_to_polygon(
     rectangle: (&LineTriangle<4326>, &LineTriangle<4326>),
 ) -> geo::Polygon {
+    assert_eq!(
+        (
+            rectangle.0.triangle.dimensions(),
+            rectangle.1.triangle.dimensions()
+        ),
+        (Dimensions::TwoDimensional, Dimensions::TwoDimensional),
+        "input triangles should not be degenerate"
+    );
     debug_assert!(
         rectangle
             .0
@@ -306,6 +315,11 @@ pub fn triangle_pair_to_polygon(
         mlp.convex_hull().geodesic_area_signed(),
         mlp.0[0].geodesic_area_signed(),
         "input triangles are not perfectly adjacent"
+    );
+    assert_eq!(
+        mlp.dimensions(),
+        Dimensions::TwoDimensional,
+        "input triangles should not be degenerate"
     );
     let p = mlp.0[0].to_owned();
     p
