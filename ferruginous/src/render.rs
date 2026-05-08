@@ -132,8 +132,12 @@ impl VScalar for RenderGeom {
             .zip(to_port_option)
             .map(|(((a, b), c), d)| (a, b, c, d))
             .map(|(a, b, c, d)| a.zip(b).zip(c).zip(d).map(|(((a, b), c), d)| (a, b, c, d)));
-        let level = metadata.child(0, input_len);
-        let sample_level = metadata.child(1, input_len);
+        let x = metadata.child(0, input_len);
+        let y = metadata.child(1, input_len);
+        let level = metadata.child(2, input_len);
+        let sample_level = metadata.child(3, input_len);
+        let x_s: &[u32] = x.as_slice_with_len(input_len);
+        let y_s: &[u32] = y.as_slice_with_len(input_len);
         let level_s: &[u8] = level.as_slice_with_len(input_len);
         let sample_level_s: &[u8] = sample_level.as_slice_with_len(input_len);
 
@@ -200,21 +204,30 @@ impl VScalar for RenderGeom {
         let weights = algorithms::cell::judweight_vessel();
         // Here the actual computation starts
 
-        let mut lengths: Vec<usize> = Vec::with_capacity(input_len);
+        let mut nulls: Vec<usize> = Vec::with_capacity(input_len);
 
         let data = from_point
             .zip(to_point)
             .zip(dimensions)
-            .zip(sample_level_s.iter().map(|&x| x as i32))
+            .zip(
+                sample_level_s
+                    .iter()
+                    .map(|&x| x as i32)
+                    .zip(x_s.iter())
+                    .zip(y_s.iter())
+                    .zip(level_s.iter())
+                    .map(|(((samp, &x), &y), &z)| (samp, x as i32, y as i32, z as u32)),
+            )
             .map(|(((from, to), dim), s)| (from, to, dim, s))
             .map(|(from_point, to_point, dim, sam_lev)| {
                 // Convert point to the grid.
                 let from_point_grid =
-                    point_to_grid((from_point.0.x, from_point.0.y).into(), sam_lev);
+                    point_to_grid((from_point.0.x, from_point.0.y).into(), sam_lev.0);
                 // Check if there is a point that a line should go to.
                 if let Some(to_point) = to_point {
                     // Convert the other point.
-                    let to_point_grid = point_to_grid((to_point.0.x, to_point.0.y).into(), sam_lev);
+                    let to_point_grid =
+                        point_to_grid((to_point.0.x, to_point.0.y).into(), sam_lev.0);
                     // Check if the vessel has any dimensions.
                     if let Some(dim) = dim {
                         let line: LineM<4326> = LineM::from((from_point.0, to_point.0));
@@ -225,8 +238,10 @@ impl VScalar for RenderGeom {
                             dim.2 as f64,
                             dim.3 as f64,
                         );
-                        let mut points = draw_line_triangle(&tri1, sam_lev);
-                        let points2 = draw_line_triangle(&tri2, sam_lev);
+                        let mut points =
+                            draw_line_triangle(&tri1, sam_lev.0, (sam_lev.1, sam_lev.2, sam_lev.3));
+                        let points2 =
+                            draw_line_triangle(&tri2, sam_lev.0, (sam_lev.1, sam_lev.2, sam_lev.3));
                         points.extend_from_slice(&points2);
                         return (points, RenderMethod::Polygon(tri1, tri2));
                     }
@@ -234,7 +249,7 @@ impl VScalar for RenderGeom {
                         draw_line(from_point_grid, to_point_grid),
                         DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
                         DateTime::from_timestamp_secs(to_point.1 as i64).unwrap(),
-                        sam_lev,
+                        sam_lev.0,
                     );
                     return (
                         points,
@@ -243,32 +258,47 @@ impl VScalar for RenderGeom {
                 }
                 let points = vec![PointWTime {
                     point: from_point_grid,
-                    z: sam_lev,
+                    z: sam_lev.0,
                     time_start: DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
                     time_end: DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
                 }];
                 return (points, RenderMethod::Point(from_point.0.into()));
             })
-            .zip(level_s.iter().map(|&x| x as i32))
+            .zip(
+                x_s.iter()
+                    .zip(y_s.iter())
+                    .zip(level_s.iter().map(|&x| x as i32))
+                    .map(|((&x, &y), z)| (x, y, z)),
+            )
             .map(|(d, s)| {
-                let mut points = d.0.iter().map(|x| x.change_zoom(s)).collect::<Vec<_>>();
+                let mut points = d
+                    .0
+                    .iter()
+                    .map(|x| x.change_zoom(s.2))
+                    .filter(|x| x.point.x == s.0 as i32 && x.point.y == s.1 as i32 && x.z == s.2)
+                    .collect::<Vec<_>>();
                 points.sort_by_cached_key(|x| (x.point, x.time_start, x.time_end));
-                let reduced_points: Vec<_> = points
-                    .chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
-                    .map(|x| {
-                        let first = x.first().expect("Chunks are not empty");
-                        let last = x.last().expect("Chunks are not empty");
-                        PointWTime {
-                            time_end: last.time_end,
-                            ..*first
-                        }
-                    })
-                    .collect();
+                let reduced_points: Option<_> = points.into_iter().reduce(|acc, x| PointWTime {
+                    point: acc.point,
+                    z: acc.z,
+                    time_start: acc.time_start.min(x.time_start),
+                    time_end: acc.time_end.max(x.time_end),
+                });
+                // .chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
+                // .map(|x| {
+                //     let first = x.first().expect("Chunks are not empty");
+                //     let last = x.last().expect("Chunks are not empty");
+                //     PointWTime {
+                //         time_end: last.time_end,
+                //         ..*first
+                //     }
+                // })
+                // .collect();
 
                 let cells = || reduced_points.iter().map(|&x| Cell::from(x));
                 let conf = ErrorMeasurementConf::builder()
                     .method(fafo::ErrorMeasurementMethod::Geodesic)
-                    .zoom(s as u8)
+                    .zoom(s.2 as u8)
                     .build();
 
                 match d.1 {
@@ -277,17 +307,22 @@ impl VScalar for RenderGeom {
                         let cov = cells_relative_coverage_by_polygon(
                             (&line_triangle, &line_triangle1),
                             cells(),
-                        );
-                        let dist = conf.cell_distance_to_ground_truth(
-                            (line_triangle.line.from, line_triangle.line.to),
-                            cells(),
-                        );
+                        )
+                        .first()
+                        .cloned();
+                        let dist = conf
+                            .cell_distance_to_ground_truth(
+                                (line_triangle.line.from, line_triangle.line.to),
+                                cells(),
+                            )
+                            .first()
+                            .cloned();
                         cov.iter()
                             .zip(dist.iter())
                             .map(|(cov, dist)| (cov.1, dist.1))
                             .zip(reduced_points.iter())
                             .map(|((cov, dist), &point)| (point, cov, 1. - (dist / 500.)))
-                            .collect::<Vec<_>>()
+                            .last()
                     }
                     RenderMethod::Line(point_m, point_m1) => {
                         // println!("Doing line scoring");
@@ -301,7 +336,7 @@ impl VScalar for RenderGeom {
                             .map(|(cov, dist)| (cov.1, dist.1))
                             .zip(reduced_points.iter())
                             .map(|((cov, dist), &point)| (point, cov, 1. - (dist / 500.)))
-                            .collect::<Vec<_>>()
+                            .last()
                     }
                     RenderMethod::Point(point_m) => {
                         // println!("Doing point scoring");
@@ -317,12 +352,9 @@ impl VScalar for RenderGeom {
                                         / 500.),
                                 )
                             })
-                            .collect::<Vec<_>>()
+                            .last()
                     }
                 }
-            })
-            .inspect(|x| {
-                lengths.push(x.len());
             })
             .zip(scoring_vals)
             .map(|(cells, score_p)| match score_p {
@@ -342,14 +374,18 @@ impl VScalar for RenderGeom {
                             mul_arr_sum(weights, [*s.0, *s.1, *s.2, *s.3, x.1 as f32, x.2 as f32]),
                         )
                     })
-                    .collect(),
-                None => cells.iter().map(|x| (x.0, 0.)).collect::<Vec<_>>(),
+                    .last(),
+                None => cells.iter().map(|x| (x.0, 0.)).last(),
             });
         let (((((x, y), z), tb), te), score): (
             ((((Vec<_>, Vec<_>), Vec<_>), Vec<_>), Vec<_>),
             Vec<_>,
         ) = data
-            .flatten()
+            .enumerate()
+            .map(|(i, v)| {
+                nulls.push(i);
+                v.unwrap_or_default()
+            })
             .map(
                 |(
                     PointWTime {
@@ -373,23 +409,26 @@ impl VScalar for RenderGeom {
                 },
             )
             .unzip();
-        let mut list_out = output.list_vector();
-        let struct_out = list_out.struct_child(lengths.iter().sum());
-        let mut x_out = struct_out.child(0, x.len());
-        let mut y_out = struct_out.child(1, y.len());
-        let mut z_out = struct_out.child(2, z.len());
-        let mut time_begin_out = struct_out.child(3, tb.len());
-        let mut time_end_out = struct_out.child(4, te.len());
-        let mut score_out = struct_out.child(5, score.len());
-        x_out.copy(&x);
-        y_out.copy(&y);
-        z_out.copy(&z);
+        let struct_out = output.struct_vector();
+        // let mut x_out = struct_out.child(0, x.len());
+        // let mut y_out = struct_out.child(1, y.len());
+        // let mut z_out = struct_out.child(2, z.len());
+        let mut time_begin_out = struct_out.child(0, tb.len());
+        let mut time_end_out = struct_out.child(1, te.len());
+        let mut score_out = struct_out.child(2, score.len());
+        // x_out.copy(&x);
+        // y_out.copy(&y);
+        // z_out.copy(&z);
         time_begin_out.copy(&tb);
         time_end_out.copy(&te);
         score_out.copy(&score);
-        lengths.iter().fold((0, 0), |acc, &x| {
-            list_out.set_entry(acc.0, acc.1, x);
-            (acc.0 + 1, acc.1 + x)
+        nulls.iter().for_each(|&x| {
+            // x_out.set_null(x);
+            // y_out.set_null(x);
+            // z_out.set_null(x);
+            time_begin_out.set_null(x);
+            time_end_out.set_null(x);
+            score_out.set_null(x);
         });
 
         std::thread::spawn(move || {
@@ -419,6 +458,8 @@ impl VScalar for RenderGeom {
             ("to_port", LogicalTypeHandle::from(LogicalTypeId::Float)),
         ];
         let metadata = [
+            ("x", LogicalTypeHandle::from(LogicalTypeId::UInteger)),
+            ("y", LogicalTypeHandle::from(LogicalTypeId::UInteger)),
             ("level", LogicalTypeHandle::from(LogicalTypeId::UTinyint)),
             (
                 "sample_level",
@@ -441,9 +482,6 @@ impl VScalar for RenderGeom {
             ("r_squared", LogicalTypeHandle::from(LogicalTypeId::Float)),
         ];
         let output_data = [
-            ("x", LogicalTypeHandle::from(LogicalTypeId::Integer)),
-            ("y", LogicalTypeHandle::from(LogicalTypeId::Integer)),
-            ("z", LogicalTypeHandle::from(LogicalTypeId::Integer)),
             ("time_start", LogicalTypeHandle::from(LogicalTypeId::Double)),
             ("time_end", LogicalTypeHandle::from(LogicalTypeId::Double)),
             ("score", LogicalTypeHandle::from(LogicalTypeId::Float)),
@@ -456,7 +494,7 @@ impl VScalar for RenderGeom {
             LogicalTypeHandle::struct_type(&metadata),
             LogicalTypeHandle::struct_type(&scoring_params),
         ];
-        let output = LogicalTypeHandle::list(&LogicalTypeHandle::struct_type(&output_data));
+        let output = LogicalTypeHandle::struct_type(&output_data);
         vec![ScalarFunctionSignature::exact(params, output)]
     }
 }
@@ -477,8 +515,8 @@ impl VScalar for Polyganize {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let input_len = input.len();
         let from_point = input.struct_vector(0);
-        let to_point = input.struct_vector(1);
-        let dimensions = input.struct_vector(2);
+        let to_point_input = input.struct_vector(1);
+        let dimensions_input = input.struct_vector(2);
 
         let from_lon = from_point.child(0, input_len);
         let from_lat = from_point.child(1, input_len);
@@ -486,17 +524,17 @@ impl VScalar for Polyganize {
         let from_lon_s: &[f32] = from_lon.as_slice_with_len(input_len);
         let from_lat_s: &[f32] = from_lat.as_slice_with_len(input_len);
         let from_time_s: &[f64] = from_time.as_slice_with_len(input_len);
-        let to_lon = to_point.child(0, input_len);
-        let to_lat = to_point.child(1, input_len);
-        let to_time = to_point.child(2, input_len);
+        let to_lon = to_point_input.child(0, input_len);
+        let to_lat = to_point_input.child(1, input_len);
+        let to_time = to_point_input.child(2, input_len);
         let to_lon_s: &[f32] = to_lon.as_slice_with_len(input_len);
         let to_lat_s: &[f32] = to_lat.as_slice_with_len(input_len);
         let to_time_s: &[f64] = to_time.as_slice_with_len(input_len);
 
-        let to_bow = dimensions.child(0, input_len);
-        let to_starboard = dimensions.child(1, input_len);
-        let to_stern = dimensions.child(2, input_len);
-        let to_port = dimensions.child(3, input_len);
+        let to_bow = dimensions_input.child(0, input_len);
+        let to_starboard = dimensions_input.child(1, input_len);
+        let to_stern = dimensions_input.child(2, input_len);
+        let to_port = dimensions_input.child(3, input_len);
 
         let to_bow_s: &[f32] = to_bow.as_slice_with_len(input_len);
         let to_starboard_s: &[f32] = to_starboard.as_slice_with_len(input_len);
@@ -513,12 +551,25 @@ impl VScalar for Polyganize {
             .zip(to_port_s.iter())
             .map(|(((&b, &sa), &se), &p)| (b as f64, sa as f64, se as f64, p as f64));
 
-        let flat_out = output.flat_vector();
+        let mut flat_out = output.flat_vector();
+        let is_null = |x: u64| {
+            to_lon.row_is_null(x)
+                || to_lat.row_is_null(x)
+                || to_time.row_is_null(x)
+                || to_bow.row_is_null(x)
+                || to_starboard.row_is_null(x)
+                || to_stern.row_is_null(x)
+                || to_port.row_is_null(x)
+        };
         from_point
             .zip(to_point)
             .zip(dimensions)
             .map(|((f, t), d)| (f, t, d))
-            .map(|(f, t, d)| {
+            .enumerate()
+            .map(|(i, (f, t, d))| {
+                if is_null(i as u64) {
+                    return vec![];
+                }
                 let line: LineM<4326> = LineM::from((f, t));
                 let (tri1, tri2) = line_to_triangle_pair(&line, d.0, d.1, d.2, d.3);
                 let poly = triangle_pair_to_polygon((&tri1, &tri2));
@@ -531,7 +582,12 @@ impl VScalar for Polyganize {
                 buf
             })
             .enumerate()
-            .for_each(|(i, v)| flat_out.insert(i, &v));
+            .for_each(|(i, v)| {
+                if is_null(i as u64) {
+                    flat_out.set_null(i);
+                }
+                flat_out.insert(i, &v);
+            });
 
         Ok(())
     }

@@ -9,7 +9,7 @@ use crate::tile3d::draw_line_triangle;
 
 pub mod tile3d;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
@@ -44,7 +44,7 @@ impl Zoom for PointWZ {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Copy, Clone, Hash)]
 pub struct PointWTime {
     pub point: Point,
     pub z: i32,
@@ -156,8 +156,8 @@ pub fn draw_2d_vessel(
                 })
                 .flat_map(|(tri1, tri2)| {
                     [
-                        draw_line_triangle(&tri1, sampling_zoom_level),
-                        draw_line_triangle(&tri2, sampling_zoom_level),
+                        draw_line_triangle(&tri1, sampling_zoom_level, (0, 0, 0)),
+                        draw_line_triangle(&tri2, sampling_zoom_level, (0, 0, 0)),
                     ]
                 })
                 .flatten()

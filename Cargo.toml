@@ -34,7 +34,7 @@ pgrx = "=0.16.1"
 tilerizer = { path = "tilerizer" }
 serde = "1.0.228"
 rayon = "1.11.0"
-duckdb = { version = "1.10500.0", features = ["bundled", "modern-full"]}
+duckdb = { version = "1.10502.0", features = ["bundled", "modern-full"]}
 rust_decimal = "1.40.0"
 clap = { version = "4.5.60", features = ["derive"] }
 thiserror = "2.0.18"

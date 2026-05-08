@@ -61,9 +61,14 @@ pub fn render_stop_object(
 pub fn draw_line_triangle(
     triangle: &LineTriangle<4326>,
     sample_zoom_level: i32,
+    sample_cell: (i32, i32, u32),
 ) -> Vec<PointWTime> {
+    let diff = sample_zoom_level as u32 - sample_cell.2;
+    let bbminx = sample_cell.0 * 2_i32.pow(diff);
+    let bbmaxx = sample_cell.0 + 1 * 2_i32.pow(diff) - 1;
+    let bbminy = sample_cell.1 * 2_i32.pow(diff);
+    let bbmaxy = sample_cell.1 + 1 * 2_i32.pow(diff) - 1;
     let triangle_grid = real_to_grid(&triangle.triangle, sample_zoom_level);
-    let (bbminx, bbminy, bbmaxx, bbmaxy) = triangle_grid.get_bbox();
     let Triangle { v1, v2, v3 } = triangle_grid;
 
     let mut points: Vec<PointWTime> = Vec::new();
@@ -225,8 +230,8 @@ mod tests {
         let coord_2: PointM = (9.99096883, 57.01322067, end_m).into();
         let line = LineM::<4326>::from((coord_1, coord_2));
         let (a, b) = line_to_triangle_pair(&line, 50.0, 50.0, 50.0, 50.0);
-        let result = draw_line_triangle(&a, 20);
-        let result_b = draw_line_triangle(&b, 20);
+        // let result = draw_line_triangle(&a, 20, );
+        // let result_b = draw_line_triangle(&b, 20);
 
         assert_eq!(result.len(), 35);
         assert_eq!(result_b.len(), 40);

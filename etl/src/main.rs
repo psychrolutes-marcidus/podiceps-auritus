@@ -7,9 +7,12 @@ use thiserror::Error;
 
 use clap::Parser;
 
-use crate::{new_db::create_db, update_db::update_db, update_ddm::update_ddm};
+use crate::{
+    new_db::create_db, render::render_cells, update_db::update_db, update_ddm::update_ddm,
+};
 
 mod new_db;
+mod render;
 mod update_db;
 mod update_ddm;
 
@@ -28,6 +31,7 @@ enum Args {
     NewDatabase(NewDatabase),
     UpdateDatabase(Update),
     UpdateDDM(UpdateDDM),
+    RenderCell(RenderCell),
 }
 
 #[derive(clap::Args, Debug)]
@@ -53,6 +57,17 @@ struct NewDatabase {
     db_path: String,
 }
 
+#[derive(clap::Args, Debug)]
+struct RenderCell {
+    db_path: String,
+    time_start: String,
+    time_stop: String,
+    tile_start: String,
+    tile_end: Option<String>,
+    level: i32,
+    sample_level: i32,
+}
+
 fn main() {
     match Args::parse() {
         Args::NewDatabase(new_database) => {
@@ -73,5 +88,6 @@ fn main() {
             let path = Path::new(&ddm_update.ddm_file);
             update_ddm(&ddm_update.db_path, path).unwrap();
         }
+        Args::RenderCell(render_params) => render_cells(render_params),
     }
 }
