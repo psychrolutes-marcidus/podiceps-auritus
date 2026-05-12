@@ -1,5 +1,5 @@
-use duckdb::params;
-use duckdb::{Config, Connection, Transaction, appender_params_from_iter};
+use duckdb::{Config, Connection};
+use duckdb::{Statement, params};
 
 use crate::RenderCell;
 
@@ -7,23 +7,21 @@ pub fn render_cells(params: RenderCell) {
     let config = Config::default()
         .allow_unsigned_extensions()
         .expect("Could not allow unsigned extensions");
-    let mut con = Connection::open_with_flags(params.db_path.clone(), config)
+    let con = Connection::open_with_flags(params.db_path.clone(), config)
         .expect("Could not open database");
     println!("Loading extension");
     con.execute_batch("LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension';").expect("Could not load extension");
-    println!("Beginning transaction");
-    let tx = con.transaction().expect("Could not start transaction");
     println!("Setup rendering views and tables");
-    setup_rendering(&tx, &params).expect("Could not setup rendering views and tables");
+    setup_rendering(&con, &params).expect("Could not setup rendering views and tables");
     println!("Getting candidate cells");
     let candidate_cells =
-        get_candidate_cells(&tx, &params).expect("Could not receive candidate cells");
+        get_candidate_cells(&con, &params).expect("Could not receive candidate cells");
     println!("Rendering cells to table");
-    render_cell_to_table(&tx, &candidate_cells, &params).expect("Could not render cells to table");
+    render_cell_to_table(&con, &candidate_cells, &params).expect("Could not render cells to table");
 }
 
 pub fn setup_rendering(
-    tx: &Transaction,
+    tx: &Connection,
     params: &RenderCell,
 ) -> Result<(), Box<dyn std::error::Error>> {
     tx.execute_batch(
@@ -125,11 +123,17 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     )?;
 
     println!("Polygonise lines");
-    tx.execute_batch(
-        "LOAD spatial;
-SET
-  geometry_always_xy = TRUE;
-CREATE OR REPLACE TEMP TABLE lines_with_geom AS (
+
+    let parser = |x: &String| {
+        x.split(",")
+            .flat_map(|x| x.parse::<i32>())
+            .take(3)
+            .collect()
+    };
+    let tile_start: Vec<_> = parser(&params.tile_start);
+    let tile_end: Vec<_> = parser(&params.tile_end.as_ref().unwrap_or(&params.tile_start));
+
+    let rest = "
   SELECT
     ap.mmsi,
     ap.timestamp,
@@ -145,13 +149,13 @@ CREATE OR REPLACE TEMP TABLE lines_with_geom AS (
     CASE
       WHEN ap.next_point IS NOT NULL
       AND {'no': 1} IN (dimensions) IS NOT NULL
-      THEN ST_Transform(st_geomfromwkb (polyganize (ap.point, ap.next_point, dimensions)), 'EPSG:4326', 'EPSG:3857')
+      THEN st_geomfromwkb (polyganize (ap.point, ap.next_point, dimensions))
       WHEN ap.next_point IS NOT NULL
-      AND {'no': 1} IN (dimensions) IS NULL THEN ST_Transform(ST_MakeLine (
+      AND {'no': 1} IN (dimensions) IS NULL THEN ST_MakeLine (
         ST_Point (ap.point.lon, ap.point.lat),
         ST_Point (ap.next_point.lon, ap.next_point.lat)
-      ), 'EPSG:4326', 'EPSG:3857')
-      ELSE ST_Transform(ST_Point (ap.point.lon, ap.point.lat), 'EPSG:4326', 'EPSG:3857')
+      )
+      ELSE ST_Point (ap.point.lon, ap.point.lat)
     END as geom,
     dimensions,
     ap.draught
@@ -164,102 +168,130 @@ CREATE OR REPLACE TEMP TABLE lines_with_geom AS (
     LEFT JOIN draught_nulls_by_ship_type dnull ON ap.ship_type = dnull.ship_type
     LEFT JOIN vessel_stats.linear_regression lr ON ap.ship_type = lr.ship_type
     LEFT JOIN vessel_stats.std_draught sd ON ap.mmsi = sd.mmsi
+    WHERE 
+    (SELECT true FROM cand_cells b WHERE ST_Intersects(cellgeom, geom) LIMIT 1)
 );
 
-CREATE INDEX vessel_idx ON lines_with_geom USING rtree(geom);",
-    )?;
+CREATE INDEX vessel_idx ON lines_with_geom USING rtree(geom);";
+    let sql = format!("LOAD spatial;
+SET
+  geometry_always_xy = TRUE;
+CREATE OR REPLACE TEMP TABLE lines_with_geom AS (
+  WITH cand_cells AS MATERIALIZED (
+SELECT
+              xt.* as x,
+              yt.* as y,
+              {} as z,
+              ST_Transform(ST_TileEnvelope (z::integer, x::integer, y::integer), 'EPSG:3857', 'EPSG:4326') as cellgeom
+            FROM
+              generate_series({}, {}, 1) xt,
+              generate_series({}, {}, 1) yt
+              )
+              {}", tile_start[2], tile_start[0], tile_end[0], tile_start[1], tile_end[1], rest);
+    tx.execute_batch(&sql)?;
 
     Ok(())
 }
 
 pub fn get_candidate_cells(
-    tx: &Transaction,
+    tx: &Connection,
     params: &RenderCell,
-) -> Result<Vec<(i32, i32, i32)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(i32, i32)>, Box<dyn std::error::Error>> {
     let parser = |x: &String| {
         x.split(",")
             .flat_map(|x| x.parse::<i32>())
             .take(3)
             .collect()
     };
-    let mut tile_start: Vec<_> = parser(&params.tile_start);
+    let tile_start: Vec<_> = parser(&params.tile_start);
 
     assert_eq!(tile_start.len(), 3);
 
-    let current_z_diff = params.level - tile_start[2];
-    tile_start[0] = tile_start[0] * 2_i32.pow(current_z_diff as u32);
-    tile_start[1] = tile_start[1] * 2_i32.pow(current_z_diff as u32);
-    tile_start[2] = params.level;
+    // let current_z_diff = params.level - tile_start[2];
+    // tile_start[0] = tile_start[0] * 2_i32.pow(current_z_diff as u32);
+    // tile_start[1] = tile_start[1] * 2_i32.pow(current_z_diff as u32);
+    // tile_start[2] = params.level;
 
-    let tile_ender = |tile_end: Vec<i32>| {
-        let mut tile_end = tile_end.clone();
-        let current_z_diff = params.level - tile_end[2];
-        tile_end[0] = (tile_end[0] + 1) * 2_i32.pow(current_z_diff as u32) - 1;
-        tile_end[1] = (tile_end[1] + 1) * 2_i32.pow(current_z_diff as u32) - 1;
-        tile_end[2] = params.level;
-        tile_end
-    };
-    let end = match params
-        .tile_end
-        .clone()
-        .map(|x| parser(&x))
-        .map(|x| tile_ender(x))
-    {
-        Some(v) => v,
-        None => {
-            let start = parser(&params.tile_start);
-            tile_ender(start)
-        }
-    };
+    // let tile_ender = |tile_end: Vec<i32>| {
+    //     let mut tile_end = tile_end.clone();
+    //     let current_z_diff = params.level - tile_end[2];
+    //     tile_end[0] = (tile_end[0] + 1) * 2_i32.pow(current_z_diff as u32);
+    //     tile_end[1] = (tile_end[1] + 1) * 2_i32.pow(current_z_diff as u32);
+    //     tile_end[2] = params.level;
+    //     tile_end
+    // };
 
-    let query = format!(
-        "
-            SELECT
-              xt.* as x,
-              yt.* as y,
-              {} as z,
-              ST_TileEnvelope (z::integer, x::integer, y::integer) as cellgeom
-            FROM
-              generate_series({}, {}, 1) xt,
-              generate_series({}, {}, 1) yt
-            WHERE
-              (
-                SELECT
-                  true
-                FROM
-                  lines_with_geom a
-                WHERE
-                  cellgeom && a.geom
-                LIMIT
-                  1
-              )
-            ",
-        params.level, tile_start[0], end[0], tile_start[1], end[1]
-    );
+    let tile_end: Vec<_> = parser(&params.tile_end.clone().unwrap_or(params.tile_start.clone()));
 
-    let mut stmt = tx.prepare(&query)?;
-    let query = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, i32>(0),
-            row.get::<_, i32>(1),
-            row.get::<_, i32>(2),
-        ))
-    })?;
-    let cells: Vec<_> = query
-        .flatten()
-        .flat_map(|x| {
-            x.0.ok()
-                .zip(x.1.ok())
-                .zip(x.2.ok())
-                .map(|((x, y), z)| (x, y, z))
+    let cells: Vec<(i32, i32)> = (tile_start[0]..=tile_end[0])
+        .map(|x| {
+            (tile_start[1]..=tile_end[1])
+                .zip(std::iter::repeat(x))
+                .map(|(y, x)| (x, y))
         })
+        .flatten()
         .collect();
-    Ok(cells)
+
+    let query = "SELECT count(*) FROM lines_with_geom WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326'), geom) LIMIT 1";
+    let mut stmt = tx.prepare(&query)?;
+
+    let candidates = cell_checker(&mut stmt, cells, tile_start[2], params.level);
+    // let candidates: Vec<_> = cells
+    //     .map(|(x, y)| {
+    //         (
+    //             x,
+    //             y,
+    //             stmt.query_row([params.level, x, y], |row| row.get::<_, i32>(0))
+    //                 .unwrap(),
+    //         )
+    //     })
+    //     .filter(|x| x.2 != 0)
+    //     .map(|(x, y, _)| (x, y))
+    //     .collect();
+    Ok(candidates)
+}
+
+fn cell_checker(
+    stmt: &mut Statement,
+    candidates: Vec<(i32, i32)>,
+    current_level: i32,
+    end_level: i32,
+) -> Vec<(i32, i32)> {
+    if current_level > end_level {
+        return candidates;
+    }
+    let increase = current_level < end_level;
+    let new_candidates: Vec<_> = candidates
+        .iter()
+        .zip(std::iter::repeat(increase))
+        .map(|(x, i)| {
+            std::iter::repeat_n((x, i as u32), 4_usize.pow(i as u32))
+                .enumerate()
+                .map(|(i, (x, inc))| {
+                    (
+                        x.0 * 2_i32.pow(inc) + (i as i32 - 1) / 2,
+                        x.1 * 2_i32.pow(inc) + (i as i32 - 1) % 2,
+                    )
+                })
+        })
+        .flatten()
+        .zip(std::iter::repeat(current_level))
+        .zip(std::iter::repeat(increase))
+        .filter(|((x, level), inc)| {
+            let count = stmt
+                .query_row([level + *inc as i32, x.0, x.1], |row| row.get::<_, i64>(0))
+                .unwrap();
+            count > 0
+        })
+        .map(|((x, _), _)| x)
+        .collect();
+    dbg!(&new_candidates.len());
+    return cell_checker(stmt, new_candidates, current_level + 1, end_level);
 }
 
 fn render_cell_to_table(
-    tx: &Transaction,
-    cells: &[(i32, i32, i32)],
+    tx: &Connection,
+    cells: &[(i32, i32)],
     params: &RenderCell,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stmt = tx.prepare(
@@ -283,7 +315,7 @@ fn render_cell_to_table(
       ST_TileEnvelope (?, ?, ?) && geom
   )
 SELECT
-  draught,
+  a.draught,
   combine_cell (
     a.draught::float,
     a.score,
@@ -301,10 +333,19 @@ LIMIT 1",
     )?;
     let result: Vec<_> = cells
         .iter()
-        .map(|(x, y, z)| {
-            stmt.query_one([x, y, z, &params.sample_level, z, x, y], |x| {
-                Ok((x.get::<_, f32>(0), x.get::<_, f32>(1)))
-            })
+        .map(|(x, y)| {
+            stmt.query_one(
+                [
+                    x,
+                    y,
+                    &params.level,
+                    &params.sample_level,
+                    &params.level,
+                    x,
+                    y,
+                ],
+                |x| Ok((x.get::<_, f32>(0), x.get::<_, f32>(1))),
+            )
             .ok()
         })
         .map(|x| x.map(|x| (x.0.unwrap_or_default(), x.1.unwrap_or_default())))
@@ -314,21 +355,21 @@ LIMIT 1",
     // Write cells to table
     tx.execute_batch(
         "
-            CREATE OR REPLACE TABLE render.render AS (
+        CREATE OR REPLACE TABLE render.render (
                 x INTEGER,
                 y INTEGER,
                 z INTEGER,
                 draught FLOAT,
-                reliability FLOAT,
+                reliability FLOAT
             );
         ",
     )?;
 
-    let mut app = tx.appender("render.render")?;
+    let mut app = tx.appender_to_db("render", "render")?;
     let result: Result<Vec<_>, _> = cells
         .iter()
         .zip(result.iter())
-        .map(|((x, y, z), (draught, rely))| app.append_row(params![x, y, z, draught, rely]))
+        .map(|((x, y), (draught, rely))| app.append_row(params![x, y, params.level, draught, rely]))
         .collect();
     result?;
     Ok(())
