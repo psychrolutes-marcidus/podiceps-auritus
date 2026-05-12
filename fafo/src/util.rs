@@ -3,6 +3,7 @@ use geo::{
     Coord, Covers, Distance, Geodesic, Line, LineIntersection, LineString, Point, Polygon,
     line_intersection::line_intersection, line_measures::LengthMeasurable,
 };
+use geo::{IsConvex, Winding};
 use std::f64;
 
 // implementation based on https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
@@ -110,12 +111,13 @@ pub(crate) fn cell_to_polygon(c: xyzcell::Cell) -> Polygon {
         * (180_f64 / f64::consts::PI);
 
     let ps = LineString::from(vec![
-        (lon, lat),     // NW
-        (lon, lat_1),   // SW
-        (lon_1, lat_1), // SE
-        (lon_1, lat),   // NE
-        (lon, lat),     // NW /* remember to close the polygon */
-    ]);
+(lon, lat),     // NW
+(lon, lat_1),   // SW
+(lon_1, lat_1), // SE
+(lon_1, lat),   // NE
+(lon, lat),   // NW /* remember to close the polygon */
+]);
+    debug_assert!(ps.is_ccw_convex(), "{ps:?}");
 
     let poly = Polygon::new(ps, vec![]);
     debug_assert!(
@@ -137,7 +139,7 @@ mod tests {
     use crate::xyzcell::Cell;
 
     use super::*;
-    use geo::{BooleanOps, Centroid, MultiPolygon};
+    use geo::{BooleanOps, Centroid, GeodesicArea, MultiPolygon, polygon};
     use geo::{Relate, coord, geometry::Rect, point};
     use tilerizer::Point;
     #[test]
@@ -191,5 +193,11 @@ mod tests {
         dbg!(MultiPolygon::new(a.to_vec()));
         dbg!(&de_9im);
         assert!(de_9im.iter().all(|p| p.is_touches()));
+    }
+
+    #[test]
+    fn degenerate_polygon_area_is_zero() {
+        let degenerate_polygon = polygon![(x:0.0,y:0.0),(x:0.0,y:0.0),(x:0.0,y:0.0),(x:0.0,y:0.0)];
+        assert_eq!(degenerate_polygon.geodesic_area_unsigned(), 0.0);
     }
 }
