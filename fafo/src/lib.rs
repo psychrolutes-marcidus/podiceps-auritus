@@ -282,8 +282,9 @@ pub fn cells_relative_coverage_by_polygon<Cells: Iterator<Item = xyzcell::Cell>>
         .map(|(c, gpoly)| {
             (
                 c,
-                gpoly.intersection(&polygon).geodesic_area_unsigned()
-                    / gpoly.geodesic_area_unsigned(),
+                (gpoly.intersection(&polygon).geodesic_area_unsigned()
+                    / gpoly.geodesic_area_unsigned())
+                .clamp(0.0, 1.0),
             )
         })
         .collect()
@@ -318,9 +319,9 @@ pub fn line_error_relative_to_perfect_and_centroid<Cells: Iterator<Item = xyzcel
         // if 1 or more points are in a cell, only return centroid distance
         if len_in_poly == Geodesic.length(&l) {
             // entire line is covered by polygon
-            (c, cent_ratio)
+            (c, cent_ratio.clamp(0.0, 1.0))
         } else {
-            (c, cent_ratio * line_length_to_perfect)
+            (c, (cent_ratio * line_length_to_perfect).clamp(0.0, 1.0))
         }
     });
     i.collect()
@@ -623,7 +624,7 @@ mod test {
         // assert!(false)
     }
     #[test]
-    fn realtive_area_works() {
+    fn relative_area_works() {
         const HEXSTRING: &str = include_str!("../../resources/mmsi245286000_surrogate4860673.txt");
 
         let bytea = hex::decode(HEXSTRING).unwrap();
