@@ -30,3 +30,15 @@ impl From<PointWTime> for Cell {
         }
     }
 }
+
+impl From<(i32, i32, u32)> for Cell {
+    fn from(value: (i32, i32, u32)) -> Self {
+        Cell {
+            coord: GPoint {
+                x: value.0,
+                y: value.1,
+            },
+            z: value.2,
+        }
+    }
+}

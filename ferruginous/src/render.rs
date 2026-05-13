@@ -135,11 +135,9 @@ impl VScalar for RenderGeom {
         let x = metadata.child(0, input_len);
         let y = metadata.child(1, input_len);
         let level = metadata.child(2, input_len);
-        let sample_level = metadata.child(3, input_len);
         let x_s: &[u32] = x.as_slice_with_len(input_len);
         let y_s: &[u32] = y.as_slice_with_len(input_len);
         let level_s: &[u8] = level.as_slice_with_len(input_len);
-        let sample_level_s: &[u8] = sample_level.as_slice_with_len(input_len);
 
         let from_point = from_lon_s
             .iter()
@@ -204,33 +202,37 @@ impl VScalar for RenderGeom {
         let weights = algorithms::cell::judweight_vessel();
         // Here the actual computation starts
 
-        let mut nulls: Vec<usize> = Vec::with_capacity(input_len);
-
         let data = from_point
             .zip(to_point)
             .zip(dimensions)
             .zip(
-                sample_level_s
+                level_s
                     .iter()
                     .map(|&x| x as i32)
                     .zip(x_s.iter())
                     .zip(y_s.iter())
-                    .zip(level_s.iter())
-                    .map(|(((samp, &x), &y), &z)| (samp, x as i32, y as i32, z as u32)),
+                    .map(|((z, &x), &y)| (x as i32, y as i32, z as u32)),
             )
             .map(|(((from, to), dim), s)| (from, to, dim, s))
-            .map(|(from_point, to_point, dim, sam_lev)| {
-                // Convert point to the grid.
-                let from_point_grid =
-                    point_to_grid((from_point.0.x, from_point.0.y).into(), sam_lev.0);
-                // Check if there is a point that a line should go to.
+            .map(|(from_point, to_point, dim, cell)| {
+                let new_cell = Cell::from(cell);
+                let cell_iter = || std::iter::repeat_n(new_cell, 1);
+                let conf = ErrorMeasurementConf::builder()
+                    .method(fafo::ErrorMeasurementMethod::Geodesic)
+                    .zoom(cell.2 as u8)
+                    .build();
                 if let Some(to_point) = to_point {
-                    // Convert the other point.
-                    let to_point_grid =
-                        point_to_grid((to_point.0.x, to_point.0.y).into(), sam_lev.0);
-                    // Check if the vessel has any dimensions.
+                    let dist = conf
+                        .cell_distance_to_ground_truth(
+                            (from_point.0.into(), to_point.0.into()),
+                            cell_iter(),
+                        )
+                        .iter()
+                        .map(|x| x.1)
+                        .last()
+                        .unwrap_or_default();
+                    let line = LineM::from((from_point.0, to_point.0));
                     if let Some(dim) = dim {
-                        let line: LineM<4326> = LineM::from((from_point.0, to_point.0));
                         let (tri1, tri2) = line_to_triangle_pair(
                             &line,
                             dim.0 as f64,
@@ -238,207 +240,60 @@ impl VScalar for RenderGeom {
                             dim.2 as f64,
                             dim.3 as f64,
                         );
-                        let mut points =
-                            draw_line_triangle(&tri1, sam_lev.0, (sam_lev.1, sam_lev.2, sam_lev.3));
-                        let points2 =
-                            draw_line_triangle(&tri2, sam_lev.0, (sam_lev.1, sam_lev.2, sam_lev.3));
-                        points.extend_from_slice(&points2);
-                        return (points, RenderMethod::Polygon(tri1, tri2));
-                    }
-                    let points = enhance_point(
-                        draw_line(from_point_grid, to_point_grid),
-                        DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
-                        DateTime::from_timestamp_secs(to_point.1 as i64).unwrap(),
-                        sam_lev.0,
-                    );
-                    return (
-                        points,
-                        RenderMethod::Line(from_point.0.into(), to_point.0.into()),
-                    );
-                }
-                let points = vec![PointWTime {
-                    point: from_point_grid,
-                    z: sam_lev.0,
-                    time_start: DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
-                    time_end: DateTime::from_timestamp_secs(from_point.1 as i64).unwrap(),
-                }];
-                return (points, RenderMethod::Point(from_point.0.into()));
-            })
-            .zip(
-                x_s.iter()
-                    .zip(y_s.iter())
-                    .zip(level_s.iter().map(|&x| x as i32))
-                    .map(|((&x, &y), z)| (x, y, z)),
-            )
-            .map(|(d, s)| {
-                let mut points = d
-                    .0
-                    .iter()
-                    .map(|x| x.change_zoom(s.2))
-                    .filter(|x| x.point.x == s.0 as i32 && x.point.y == s.1 as i32 && x.z == s.2)
-                    .collect::<Vec<_>>();
-                points.sort_by_cached_key(|x| (x.point, x.time_start, x.time_end));
-                let reduced_points: Option<_> = points.into_iter().reduce(|acc, x| PointWTime {
-                    point: acc.point,
-                    z: acc.z,
-                    time_start: acc.time_start.min(x.time_start),
-                    time_end: acc.time_end.max(x.time_end),
-                });
-                // .chunk_by(|a, b| a.point == b.point && a.time_end >= b.time_start)
-                // .map(|x| {
-                //     let first = x.first().expect("Chunks are not empty");
-                //     let last = x.last().expect("Chunks are not empty");
-                //     PointWTime {
-                //         time_end: last.time_end,
-                //         ..*first
-                //     }
-                // })
-                // .collect();
-
-                let cells = || reduced_points.iter().map(|&x| Cell::from(x));
-                let conf = ErrorMeasurementConf::builder()
-                    .method(fafo::ErrorMeasurementMethod::Geodesic)
-                    .zoom(s.2 as u8)
-                    .build();
-
-                match d.1 {
-                    RenderMethod::Polygon(line_triangle, line_triangle1) => {
-                        // println!("Doing dim scoring");
-                        let cov = cells_relative_coverage_by_polygon(
-                            (&line_triangle, &line_triangle1),
-                            cells(),
-                        )
-                        .first()
-                        .cloned();
-                        let dist = conf
-                            .cell_distance_to_ground_truth(
-                                (line_triangle.line.from, line_triangle.line.to),
-                                cells(),
-                            )
-                            .first()
-                            .cloned();
-                        cov.iter()
-                            .zip(dist.iter())
-                            .map(|(cov, dist)| (cov.1, dist.1))
-                            .zip(reduced_points.iter())
-                            .map(|((cov, dist), &point)| (point, cov, 1. - (dist / 500.)))
+                        let cov = cells_relative_coverage_by_polygon((&tri1, &tri2), cell_iter())
                             .last()
+                            .map(|x| x.1)
+                            .unwrap_or_default();
+                        return (cov, dist);
                     }
-                    RenderMethod::Line(point_m, point_m1) => {
-                        // println!("Doing line scoring");
-                        let cov = line_error_relative_to_perfect_and_centroid(
-                            (point_m, point_m1),
-                            cells(),
-                        );
-                        let dist = conf.cell_distance_to_ground_truth((point_m, point_m1), cells());
-                        cov.iter()
-                            .zip(dist.iter())
-                            .map(|(cov, dist)| (cov.1, dist.1))
-                            .zip(reduced_points.iter())
-                            .map(|((cov, dist), &point)| (point, cov, 1. - (dist / 500.)))
-                            .last()
-                    }
-                    RenderMethod::Point(point_m) => {
-                        // println!("Doing point scoring");
-                        let cov = 1.;
-                        reduced_points
-                            .iter()
-                            .zip(cells())
-                            .map(|(&x, c)| {
-                                (
-                                    x,
-                                    cov,
-                                    1. - (ground_truth_to_cell_centroid_geodesic(point_m, &c)
-                                        / 500.),
-                                )
-                            })
-                            .last()
-                    }
-                }
-            })
-            .zip(scoring_vals)
-            .map(|(cells, score_p)| match score_p {
-                Some(s) => cells
-                    .iter()
-                    .inspect(|x| {
-                        if x.1 > 1.1 || x.1 < 0. {
-                            dbg!(&x.1);
-                        }
-                        if x.2 > 1.1 || x.1 < 0. {
-                            dbg!(&x.2);
-                        }
-                    })
-                    .map(|x| {
-                        (
-                            x.0,
-                            mul_arr_sum(weights, [*s.0, *s.1, *s.2, *s.3, x.1 as f32, x.2 as f32]),
-                        )
-                    })
-                    .last(),
-                None => cells.iter().map(|x| (x.0, 0.)).last(),
-            });
-        let (((((x, y), z), tb), te), score): (
-            ((((Vec<_>, Vec<_>), Vec<_>), Vec<_>), Vec<_>),
-            Vec<_>,
-        ) = data
-            .enumerate()
-            .map(|(i, v)| {
-                nulls.push(i);
-                v.unwrap_or_default()
-            })
-            .map(
-                |(
-                    PointWTime {
-                        point,
-                        z,
-                        time_start,
-                        time_end,
-                    },
-                    score,
-                )| {
-                    (
-                        (
-                            (
-                                ((point.x, point.y), z),
-                                time_start.timestamp_millis() as f64 / 1000.,
-                            ),
-                            time_end.timestamp_millis() as f64 / 1000.,
-                        ),
-                        score,
+                    let cov = line_error_relative_to_perfect_and_centroid(
+                        (from_point.0.into(), to_point.0.into()),
+                        cell_iter(),
                     )
-                },
-            )
-            .unzip();
-        let struct_out = output.struct_vector();
+                    .iter()
+                    .map(|x| x.1)
+                    .last()
+                    .unwrap_or_default();
+                    return (cov, dist);
+                }
+                let dist =
+                    ground_truth_to_cell_centroid_geodesic(PointM::from(from_point.0), &new_cell);
+                return (0., dist);
+            })
+            .map(|x| (x.0, (1. - x.1 / 500.).clamp(0., 1.)))
+            .zip(scoring_vals)
+            .map(|(cells, score_p)| {
+                score_p.inspect(|x| {
+                    if *x.0 > 1.0 || *x.1 > 1.0 || *x.2 > 1.0 || *x.3 > 1.0 {
+                        dbg!(&x);
+                    }
+                });
+
+                if cells.0 > 1.0 || cells.1 > 1.0 {
+                    dbg!(&cells);
+                }
+                match score_p {
+                    Some(s) => mul_arr_sum(
+                        weights,
+                        [*s.0, *s.1, *s.2, *s.3, cells.0 as f32, cells.1 as f32],
+                    ),
+                    None => 0.,
+                }
+            });
+        let score: Vec<_> = data.collect();
         // let mut x_out = struct_out.child(0, x.len());
         // let mut y_out = struct_out.child(1, y.len());
         // let mut z_out = struct_out.child(2, z.len());
-        let mut time_begin_out = struct_out.child(0, tb.len());
-        let mut time_end_out = struct_out.child(1, te.len());
-        let mut score_out = struct_out.child(2, score.len());
+        // let mut time_begin_out = struct_out.child(0, tb.len());
+        // let mut time_end_out = struct_out.child(1, te.len());
+        let mut score_out = output.flat_vector();
         // x_out.copy(&x);
         // y_out.copy(&y);
         // z_out.copy(&z);
-        time_begin_out.copy(&tb);
-        time_end_out.copy(&te);
+        // time_begin_out.copy(&tb);
+        // time_end_out.copy(&te);
         score_out.copy(&score);
-        nulls.iter().for_each(|&x| {
-            // x_out.set_null(x);
-            // y_out.set_null(x);
-            // z_out.set_null(x);
-            time_begin_out.set_null(x);
-            time_end_out.set_null(x);
-            score_out.set_null(x);
-        });
 
-        std::thread::spawn(move || {
-            drop(x);
-            drop(y);
-            drop(z);
-            drop(tb);
-            drop(te);
-            drop(score);
-        });
         Ok(())
     }
 
@@ -461,10 +316,6 @@ impl VScalar for RenderGeom {
             ("x", LogicalTypeHandle::from(LogicalTypeId::UInteger)),
             ("y", LogicalTypeHandle::from(LogicalTypeId::UInteger)),
             ("level", LogicalTypeHandle::from(LogicalTypeId::UTinyint)),
-            (
-                "sample_level",
-                LogicalTypeHandle::from(LogicalTypeId::UTinyint),
-            ),
         ];
         let scoring_params = [
             (
@@ -481,12 +332,6 @@ impl VScalar for RenderGeom {
             ),
             ("r_squared", LogicalTypeHandle::from(LogicalTypeId::Float)),
         ];
-        let output_data = [
-            ("time_start", LogicalTypeHandle::from(LogicalTypeId::Double)),
-            ("time_end", LogicalTypeHandle::from(LogicalTypeId::Double)),
-            ("score", LogicalTypeHandle::from(LogicalTypeId::Float)),
-        ];
-
         let params = vec![
             LogicalTypeHandle::struct_type(&point),
             LogicalTypeHandle::struct_type(&point),
@@ -494,7 +339,7 @@ impl VScalar for RenderGeom {
             LogicalTypeHandle::struct_type(&metadata),
             LogicalTypeHandle::struct_type(&scoring_params),
         ];
-        let output = LogicalTypeHandle::struct_type(&output_data);
+        let output = LogicalTypeHandle::from(LogicalTypeId::Float);
         vec![ScalarFunctionSignature::exact(params, output)]
     }
 }

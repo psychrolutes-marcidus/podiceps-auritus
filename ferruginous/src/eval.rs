@@ -236,12 +236,20 @@ impl VScalar for CombineCell {
     }
 }
 
+fn normal_asserter(x: f32) -> f32 {
+    if x > 1.0 || x < 0.0 {
+        dbg!(x);
+    }
+    assert!(x <= 1.0 && x >= 0.0);
+    x
+}
+
 fn combine_cell(draught: [f32; 2], score: [f32; 2], deviation: [f32; 2]) -> f32 {
     gravity_model(
-        score[0],
+        normal_asserter(score[0]),
         draught[0],
         deviation[0],
-        score[1],
+        normal_asserter(score[1]),
         draught[1],
         deviation[1],
     )

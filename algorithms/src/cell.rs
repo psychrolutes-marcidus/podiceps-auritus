@@ -92,6 +92,7 @@ pub fn gravity_model(
 ) -> f32 {
     let diff = draught_m - draught_o;
     let rel = rel_m * rel_o;
+    assert!(rel <= 1.1);
     let dr_m = draught_dev(draught_m, dev_m);
     let dr_o = draught_dev(draught_o, dev_o);
     let _dev = dr_m * dr_o;

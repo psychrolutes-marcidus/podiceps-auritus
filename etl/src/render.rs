@@ -269,8 +269,8 @@ fn cell_checker(
                 .enumerate()
                 .map(|(i, (x, inc))| {
                     (
-                        x.0 * 2_i32.pow(inc) + (i as i32 - 1) / 2,
-                        x.1 * 2_i32.pow(inc) + (i as i32 - 1) % 2,
+                        x.0 * 2_i32.pow(inc) + (i as i32) / 2,
+                        x.1 * 2_i32.pow(inc) + (i as i32) % 2,
                     )
                 })
         })
@@ -286,6 +286,9 @@ fn cell_checker(
         .map(|((x, _), _)| x)
         .collect();
     dbg!(&new_candidates.len());
+    if current_level + 1 >= end_level {
+        return new_candidates;
+    }
     return cell_checker(stmt, new_candidates, current_level + 1, end_level);
 }
 
@@ -299,23 +302,21 @@ fn render_cell_to_table(
   scored AS (
     SELECT
       draught,
-      unnest(
-        render_geom (
-          point,
-          next_point,
-          dimensions,
-          {'x': ?, 'y': ?, 'level': ?, 'sample_level': ?},
-          parameters
-        )
-      ),
+      render_geom (
+        point,
+        next_point,
+        dimensions,
+        {'x': ?, 'y': ?, 'level': ?},
+        parameters
+      ) as score,
       median_draught
     FROM
       lines_with_geom a
     WHERE
-      ST_TileEnvelope (?, ?, ?) && geom
+      draught IS NOT NULL AND ST_Transform(ST_TileEnvelope (?, ?, ?), 'EPSG:3857', 'EPSG:4326') && a.geom
   )
 SELECT
-  a.draught,
+  a.draught::float as draught,
   combine_cell (
     a.draught::float,
     a.score,
@@ -329,25 +330,24 @@ FROM
   LEFT JOIN scored b ON a.draught >= b.draught
 WHERE reliability >= 0.53
 ORDER BY draught, reliability DESC
-LIMIT 1",
+LIMIT 1;",
     )?;
     let result: Vec<_> = cells
         .iter()
         .map(|(x, y)| {
             stmt.query_one(
-                [
-                    x,
-                    y,
-                    &params.level,
-                    &params.sample_level,
-                    &params.level,
-                    x,
-                    y,
+                params![
+                    *x as u32,
+                    *y as u32,
+                    params.level as u8,
+                    params.level,
+                    *x,
+                    *y
                 ],
                 |x| Ok((x.get::<_, f32>(0), x.get::<_, f32>(1))),
             )
-            .ok()
         })
+        .map(|x| x.ok())
         .map(|x| x.map(|x| (x.0.unwrap_or_default(), x.1.unwrap_or_default())))
         .map(|x| x.unwrap_or_default())
         .collect();
@@ -369,7 +369,9 @@ LIMIT 1",
     let result: Result<Vec<_>, _> = cells
         .iter()
         .zip(result.iter())
-        .map(|((x, y), (draught, rely))| app.append_row(params![x, y, params.level, draught, rely]))
+        .map(|((x, y), (draught, rely))| {
+            app.append_row(params![*x, *y, params.level, *draught, *rely])
+        })
         .collect();
     result?;
     Ok(())
