@@ -11,6 +11,7 @@ linesonmaps = { workspace = true }
 geo = { workspace = true }
 rayon = { workspace = true }
 sysinfo = "0.38.4"
+r2d2 = { workspace = true }
 
 [lints]
 workspace = true

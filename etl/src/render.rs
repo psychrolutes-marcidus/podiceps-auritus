@@ -1,5 +1,10 @@
-use duckdb::{Config, Connection};
+use std::cmp;
+use std::sync::{Arc, Mutex};
+
+use duckdb::{Config, Connection, DuckdbConnectionManager};
 use duckdb::{Statement, params};
+use r2d2::ManageConnection;
+use rayon::prelude::*;
 
 use crate::RenderCell;
 
@@ -14,8 +19,27 @@ pub fn render_cells(params: RenderCell) {
     println!("Setup rendering views and tables");
     setup_rendering(&con, &params).expect("Could not setup rendering views and tables");
     println!("Getting candidate cells");
+    con.close().expect("Could not close connection");
+    let config = Config::default()
+        .enable_autoload_extension(true)
+        .expect("Cannot autoload extensions")
+        .allow_unsigned_extensions()
+        .expect("Cannot allow unsigned extensions")
+        .access_mode(duckdb::AccessMode::ReadOnly)
+        .expect("Cannot open in read only mode");
+    let con = Connection::open_with_flags(params.db_path.clone(), config)
+        .expect("Could not open connection pool");
+    con.execute_batch("LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension'; LOAD spatial; SET geometry_always_xy = true;").expect("Could not load extensions");
     let candidate_cells =
-        get_candidate_cells(&con, &params).expect("Could not receive candidate cells");
+        get_candidate_cells(con, &params).expect("Could not receive candidate cells");
+
+    let config = Config::default()
+        .allow_unsigned_extensions()
+        .expect("Could not allow unsigned extensions");
+    let con = Connection::open_with_flags(params.db_path.clone(), config)
+        .expect("Could not open database");
+    println!("Loading extension");
+    con.execute_batch("LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension';").expect("Could not load extension");
     println!("Rendering cells to table");
     render_cell_to_table(&con, &candidate_cells, &params).expect("Could not render cells to table");
 }
@@ -176,7 +200,7 @@ CREATE INDEX vessel_idx ON lines_with_geom USING rtree(geom);";
     let sql = format!("LOAD spatial;
 SET
   geometry_always_xy = TRUE;
-CREATE OR REPLACE TEMP TABLE lines_with_geom AS (
+CREATE OR REPLACE TABLE lines_with_geom AS (
   WITH cand_cells AS MATERIALIZED (
 SELECT
               xt.* as x,
@@ -194,9 +218,10 @@ SELECT
 }
 
 pub fn get_candidate_cells(
-    tx: &Connection,
+    manager: Connection,
     params: &RenderCell,
 ) -> Result<Vec<(i32, i32)>, Box<dyn std::error::Error>> {
+    let a_manager = Arc::new(Mutex::new(manager));
     let parser = |x: &String| {
         x.split(",")
             .flat_map(|x| x.parse::<i32>())
@@ -223,7 +248,7 @@ pub fn get_candidate_cells(
 
     let tile_end: Vec<_> = parser(&params.tile_end.clone().unwrap_or(params.tile_start.clone()));
 
-    let cells: Vec<(i32, i32)> = (tile_start[0]..=tile_end[0])
+    let mut cells: Vec<(i32, i32)> = (tile_start[0]..=tile_end[0])
         .map(|x| {
             (tile_start[1]..=tile_end[1])
                 .zip(std::iter::repeat(x))
@@ -232,10 +257,35 @@ pub fn get_candidate_cells(
         .flatten()
         .collect();
 
-    let query = "SELECT count(*) FROM lines_with_geom WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326'), geom) LIMIT 1";
-    let mut stmt = tx.prepare(&query)?;
+    for i in tile_start[2]..=params.level {
+        let increase = i < params.level;
 
-    let candidates = cell_checker(&mut stmt, cells, tile_start[2], params.level);
+        let new_cells: Vec<_> = cells
+            .par_iter()
+            .map(|x| {
+                rayon::iter::repeat_n((x, increase as u32), 4_usize.pow(increase as u32))
+                    .enumerate()
+                    .map(|(i, (x, inc))| {
+                        (
+                            x.0 * 2_i32.pow(inc) + (i as i32) / 2,
+                            x.1 * 2_i32.pow(inc) + (i as i32) % 2,
+                        )
+                    })
+            })
+            .flatten()
+            .collect();
+        let chunks = cmp::max(new_cells.len() / 16, 2048);
+        cells = new_cells.par_chunks(chunks).with_min_len(1).map(|x| (x, a_manager.lock().expect("Shit dead").try_clone().expect("Could not connect to db inside pool"))).map(|(cells, connection)| {
+            
+    let query = "SELECT true FROM lines_with_geom WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326'), geom) LIMIT 1";
+    let mut stmt = connection.prepare(&query).expect("Could not prepare query");
+    cells.iter().filter(|x| stmt.query_row([i + increase as i32, x.0, x.1], |row| row.get::<_, bool>(0)).ok().is_some()).collect::<Vec<_>>()
+
+
+        }).flatten().cloned().collect();
+        println!("Level: {}, Cells: {}", i, cells.len());
+    }
+
     // let candidates: Vec<_> = cells
     //     .map(|(x, y)| {
     //         (
@@ -248,7 +298,7 @@ pub fn get_candidate_cells(
     //     .filter(|x| x.2 != 0)
     //     .map(|(x, y, _)| (x, y))
     //     .collect();
-    Ok(candidates)
+    Ok(cells)
 }
 
 fn cell_checker(
@@ -278,10 +328,9 @@ fn cell_checker(
         .zip(std::iter::repeat(current_level))
         .zip(std::iter::repeat(increase))
         .filter(|((x, level), inc)| {
-            let count = stmt
-                .query_row([level + *inc as i32, x.0, x.1], |row| row.get::<_, i64>(0))
-                .unwrap();
-            count > 0
+            stmt.query_row([level + *inc as i32, x.0, x.1], |row| row.get::<_, bool>(0))
+                .ok()
+                .is_some()
         })
         .map(|((x, _), _)| x)
         .collect();
@@ -293,11 +342,13 @@ fn cell_checker(
 }
 
 fn render_cell_to_table(
-    tx: &Connection,
+    con: &Connection,
     cells: &[(i32, i32)],
     params: &RenderCell,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stmt = tx.prepare(
+    con.execute_batch("LOAD spatial; SET geometry_always_xy = true;")
+        .expect("Something");
+    let mut stmt = con.prepare(
         "WITH
   scored AS (
     SELECT
@@ -353,7 +404,7 @@ LIMIT 1;",
         .collect();
 
     // Write cells to table
-    tx.execute_batch(
+    con.execute_batch(
         "
         CREATE OR REPLACE TABLE render.render (
                 x INTEGER,
@@ -365,7 +416,7 @@ LIMIT 1;",
         ",
     )?;
 
-    let mut app = tx.appender_to_db("render", "render")?;
+    let mut app = con.appender_to_db("render", "render")?;
     let result: Result<Vec<_>, _> = cells
         .iter()
         .zip(result.iter())
