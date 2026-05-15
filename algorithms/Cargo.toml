@@ -7,3 +7,6 @@ edition = "2024"
 nalgebra = { workspace = true }
 cached = { workspace = true }
 approx = { workspace = true }
+geo = { workspace = true }
+geo-types = { workspace = true }
+rstar = { workspace = true }

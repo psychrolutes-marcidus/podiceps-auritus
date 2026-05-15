@@ -12,6 +12,10 @@ geo = { workspace = true }
 rayon = { workspace = true }
 sysinfo = "0.38.4"
 r2d2 = { workspace = true }
+wkb = { workspace = true }
+geo-traits = { workspace = true }
+algorithms = { workspace = true }
+rstar = { workspace = true }
 
 [lints]
 workspace = true

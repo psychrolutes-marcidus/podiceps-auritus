@@ -1,12 +1,20 @@
 use std::cmp;
 use std::sync::{Arc, Mutex};
 
+use algorithms::cell::{gravity_model, st_tileenvelope};
 use duckdb::{Config, Connection, DuckdbConnectionManager};
 use duckdb::{Statement, params};
+use geo::{Centroid, Geometry, Intersects, Point, algorithm};
+use geo_traits::GeometryTrait;
+use geo_traits::to_geo::{ToGeoGeometry, ToGeoLine, ToGeoPoint, ToGeoPolygon};
 use r2d2::ManageConnection;
 use rayon::prelude::*;
+use rstar::primitives::{GeomWithData, Rectangle};
+use rstar::{Envelope, RTreeObject};
 
 use crate::RenderCell;
+
+const EXTENSION_QUERY: &str = "LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension'; LOAD spatial; SET geometry_always_xy = true;";
 
 pub fn render_cells(params: RenderCell) {
     let config = Config::default()
@@ -15,7 +23,8 @@ pub fn render_cells(params: RenderCell) {
     let con = Connection::open_with_flags(params.db_path.clone(), config)
         .expect("Could not open database");
     println!("Loading extension");
-    con.execute_batch("LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension';").expect("Could not load extension");
+    con.execute_batch(EXTENSION_QUERY)
+        .expect("Could not load extension");
     println!("Setup rendering views and tables");
     setup_rendering(&con, &params).expect("Could not setup rendering views and tables");
     println!("Getting candidate cells");
@@ -29,7 +38,8 @@ pub fn render_cells(params: RenderCell) {
         .expect("Cannot open in read only mode");
     let con = Connection::open_with_flags(params.db_path.clone(), config)
         .expect("Could not open connection pool");
-    con.execute_batch("LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension'; LOAD spatial; SET geometry_always_xy = true;").expect("Could not load extensions");
+    con.execute_batch(EXTENSION_QUERY)
+        .expect("Could not load extensions");
     let candidate_cells =
         get_candidate_cells(con, &params).expect("Could not receive candidate cells");
 
@@ -39,7 +49,8 @@ pub fn render_cells(params: RenderCell) {
     let con = Connection::open_with_flags(params.db_path.clone(), config)
         .expect("Could not open database");
     println!("Loading extension");
-    con.execute_batch("LOAD '/home/rasmus/Projekter/xipeng/ferruginous/build/release/ferruginous.duckdb_extension';").expect("Could not load extension");
+    con.execute_batch(EXTENSION_QUERY)
+        .expect("Could not load extension");
     println!("Rendering cells to table");
     render_cell_to_table(&con, &candidate_cells, &params).expect("Could not render cells to table");
 }
@@ -159,6 +170,7 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
 
     let rest = "
   SELECT
+    nextval('geom_id_seq') as id,
     ap.mmsi,
     ap.timestamp,
     ap.point,
@@ -196,10 +208,11 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     (SELECT true FROM cand_cells b WHERE ST_Intersects(cellgeom, geom) LIMIT 1)
 );
 
-CREATE INDEX vessel_idx ON lines_with_geom USING rtree(geom);";
+CREATE INDEX geom_idx ON lines_with_geom USING RTREE (geom)";
     let sql = format!("LOAD spatial;
 SET
   geometry_always_xy = TRUE;
+  CREATE TEMP SEQUENCE geom_id_seq INCREMENT BY 1 START WITH 1;
 CREATE OR REPLACE TABLE lines_with_geom AS (
   WITH cand_cells AS MATERIALIZED (
 SELECT
@@ -217,10 +230,62 @@ SELECT
     Ok(())
 }
 
+type RectIdx = GeomWithData<Rectangle<Point>, usize>;
+fn get_index(
+    con: &Connection,
+) -> Result<
+    (
+        rstar::RTree<GeomWithData<Rectangle<Point>, usize>>,
+        Vec<Geometry>,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    let mut stmt = con.prepare(
+        "SELECT ST_AsWKB(ST_Transform(geom, 'EPSG:4326', 'EPSG:3857')) FROM lines_with_geom;",
+    )?;
+    let (aabbs, geoms): (Vec<_>, Vec<_>) = stmt
+        .query_map([], |row| row.get::<_, Vec<u8>>(0))?
+        .map(|x| x.unwrap())
+        .enumerate()
+        .map(|(i, geom)| {
+            let geom = wkb::reader::read_wkb(&geom).expect("Malformed wkb");
+            match geom.as_type() {
+                geo_traits::GeometryType::Point(p) => (
+                    RectIdx::new(
+                        rstar::primitives::Rectangle::from_aabb(p.to_point().envelope()),
+                        i,
+                    ),
+                    p.to_geometry(),
+                ),
+                geo_traits::GeometryType::Line(l) => (
+                    RectIdx::new(
+                        rstar::primitives::Rectangle::from_aabb(l.to_line().envelope()),
+                        i,
+                    ),
+                    l.to_geometry(),
+                ),
+                geo_traits::GeometryType::Polygon(poly) => (
+                    RectIdx::new(
+                        rstar::primitives::Rectangle::from_aabb(poly.to_polygon().envelope()),
+                        i,
+                    ),
+                    poly.to_geometry(),
+                ),
+                _ => unimplemented!(),
+            }
+        })
+        .unzip();
+
+    let index = rstar::RTree::bulk_load(aabbs);
+    Ok((index, geoms))
+}
+
 pub fn get_candidate_cells(
     manager: Connection,
     params: &RenderCell,
 ) -> Result<Vec<(i32, i32)>, Box<dyn std::error::Error>> {
+    let (index, geoms) = get_index(&manager)?;
+    assert_ne!(geoms.len(), 0);
     let a_manager = Arc::new(Mutex::new(manager));
     let parser = |x: &String| {
         x.split(",")
@@ -232,7 +297,7 @@ pub fn get_candidate_cells(
 
     assert_eq!(tile_start.len(), 3);
 
-    // let current_z_diff = params.level - tile_start[2];
+    // le.map(|x| x.0.ok().zip(x.1.ok()).zip(x.2.okdraughtmapscorex| medt  (draught, score, medcurrent_z_diff = params.level - tile_start[2];
     // tile_start[0] = tile_start[0] * 2_i32.pow(current_z_diff as u32);
     // tile_start[1] = tile_start[1] * 2_i32.pow(current_z_diff as u32);
     // tile_start[2] = params.level;
@@ -260,8 +325,9 @@ pub fn get_candidate_cells(
     for i in tile_start[2]..=params.level {
         let increase = i < params.level;
 
-        let new_cells: Vec<_> = cells
+        cells = cells
             .par_iter()
+            .with_min_len(2048)
             .map(|x| {
                 rayon::iter::repeat_n((x, increase as u32), 4_usize.pow(increase as u32))
                     .enumerate()
@@ -273,20 +339,21 @@ pub fn get_candidate_cells(
                     })
             })
             .flatten()
+            .filter(|point| {
+                let tile = st_tileenvelope(i as u32 + increase as u32, point.0, point.1);
+                let mut inter = index.locate_in_envelope_intersecting(&tile.envelope());
+                inter
+                    .find_map(|x| match geoms[x.data].intersects(&tile) {
+                        true => Some(x),
+                        false => None,
+                    })
+                    .is_some()
+            })
             .collect();
-        let chunks = cmp::max(new_cells.len() / 16, 2048);
-        cells = new_cells.par_chunks(chunks).with_min_len(1).map(|x| (x, a_manager.lock().expect("Shit dead").try_clone().expect("Could not connect to db inside pool"))).map(|(cells, connection)| {
-            
-    let query = "SELECT true FROM lines_with_geom WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326'), geom) LIMIT 1";
-    let mut stmt = connection.prepare(&query).expect("Could not prepare query");
-    cells.iter().filter(|x| stmt.query_row([i + increase as i32, x.0, x.1], |row| row.get::<_, bool>(0)).ok().is_some()).collect::<Vec<_>>()
-
-
-        }).flatten().cloned().collect();
         println!("Level: {}, Cells: {}", i, cells.len());
     }
 
-    // let candidates: Vec<_> = cells
+    //.map(|x| x.0.ok().zip(x.1.ok()).zip(x.2.okdraughtmapscorex| medle (draught, score, medt candidates: Vec<_> = cells
     //     .map(|(x, y)| {
     //         (
     //             x,
@@ -301,119 +368,194 @@ pub fn get_candidate_cells(
     Ok(cells)
 }
 
-fn cell_checker(
-    stmt: &mut Statement,
-    candidates: Vec<(i32, i32)>,
-    current_level: i32,
-    end_level: i32,
-) -> Vec<(i32, i32)> {
-    if current_level > end_level {
-        return candidates;
-    }
-    let increase = current_level < end_level;
-    let new_candidates: Vec<_> = candidates
-        .iter()
-        .zip(std::iter::repeat(increase))
-        .map(|(x, i)| {
-            std::iter::repeat_n((x, i as u32), 4_usize.pow(i as u32))
-                .enumerate()
-                .map(|(i, (x, inc))| {
-                    (
-                        x.0 * 2_i32.pow(inc) + (i as i32) / 2,
-                        x.1 * 2_i32.pow(inc) + (i as i32) % 2,
-                    )
-                })
-        })
-        .flatten()
-        .zip(std::iter::repeat(current_level))
-        .zip(std::iter::repeat(increase))
-        .filter(|((x, level), inc)| {
-            stmt.query_row([level + *inc as i32, x.0, x.1], |row| row.get::<_, bool>(0))
-                .ok()
-                .is_some()
-        })
-        .map(|((x, _), _)| x)
-        .collect();
-    dbg!(&new_candidates.len());
-    if current_level + 1 >= end_level {
-        return new_candidates;
-    }
-    return cell_checker(stmt, new_candidates, current_level + 1, end_level);
-}
-
 fn render_cell_to_table(
     con: &Connection,
     cells: &[(i32, i32)],
     params: &RenderCell,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    con.execute_batch("LOAD spatial; SET geometry_always_xy = true;")
-        .expect("Something");
-    let mut stmt = con.prepare(
-        "WITH
-  scored AS (
-    SELECT
-      draught,
-      render_geom (
-        point,
-        next_point,
-        dimensions,
-        {'x': ?, 'y': ?, 'level': ?},
-        parameters
-      ) as score,
-      median_draught
-    FROM
-      lines_with_geom a
-    WHERE
-      draught IS NOT NULL AND ST_Transform(ST_TileEnvelope (?, ?, ?), 'EPSG:3857', 'EPSG:4326') && a.geom
-  )
-SELECT
-  a.draught::float as draught,
-  combine_cell (
-    a.draught::float,
-    a.score,
-    a.median_draught::float,
-    b.draught::float,
-    b.score,
-    b.median_draught::float
-  ) as reliability
-FROM
-  scored a
-  LEFT JOIN scored b ON a.draught >= b.draught
-WHERE reliability >= 0.53
-ORDER BY draught, reliability DESC
-LIMIT 1;",
-    )?;
+    let con = Arc::new(Mutex::new(
+        con.try_clone().expect("Could not clone connection"),
+    ));
+
+    let chunks_size = cells.len() / 16;
+
+    let query = "SELECT draught::float, render_geom(point, next_point, dimensions, {'x': ?, 'y': ?, 'level': ?}, parameters) as score, median_draught 
+     FROM lines_with_geom b
+     WHERE ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326') && geom
+     ORDER BY draught, score DESC;";
+
     let result: Vec<_> = cells
-        .iter()
-        .map(|(x, y)| {
-            stmt.query_one(
-                params![
-                    *x as u32,
-                    *y as u32,
-                    params.level as u8,
-                    params.level,
-                    *x,
-                    *y
-                ],
-                |x| Ok((x.get::<_, f32>(0), x.get::<_, f32>(1))),
-            )
+        .par_chunks(chunks_size)
+        .map(|x| {
+            let con = con.lock().unwrap().try_clone().unwrap();
+            con.execute_batch(EXTENSION_QUERY).unwrap();
+            let mut stmt = con.prepare(query).unwrap();
+
+            let something: Vec<_> = x
+                .iter()
+                .map(|(x, y)| {
+                    let stuff: Vec<_> = stmt
+                        .query_map(
+                            params![
+                                *x as u32,
+                                *y as u32,
+                                params.level as u8,
+                                params.level,
+                                *x,
+                                *y
+                            ],
+                            |row| {
+                                Ok((
+                                    row.get::<_, f32>(0),
+                                    row.get::<_, f32>(1),
+                                    row.get::<_, f32>(2),
+                                ))
+                            },
+                        )
+                        .unwrap()
+                        .flatten()
+                        .map(|x| {
+                            x.0.ok()
+                                .zip(x.1.ok())
+                                .zip(x.2.ok())
+                                .map(|((draught, score), med)| (score, draught, med))
+                        })
+                        .flatten()
+                        .collect();
+                    let result = stuff
+                        .iter()
+                        .map(|left| {
+                            stuff.iter().map(|right| {
+                                (
+                                    left.0,
+                                    gravity_model(
+                                        left.0, left.1, left.2, right.0, right.1, right.2,
+                                    ),
+                                )
+                            })
+                        })
+                        .flatten()
+                        .filter(|(_, rel)| *rel >= 0.53)
+                        .max_by(|a, b| a.partial_cmp(b).unwrap())
+                        .unwrap_or_default();
+                    result
+                })
+                .collect();
+            something
         })
-        .map(|x| x.ok())
-        .map(|x| x.map(|x| (x.0.unwrap_or_default(), x.1.unwrap_or_default())))
-        .map(|x| x.unwrap_or_default())
+        .flatten()
         .collect();
 
+    // con.execute_batch(
+    //     "LOAD spatial; SET geometry_always_xy = true;
+    //     CREATE OR REPLACE TABLE cand_cells (
+    //         id BIGINT,
+    //         x INTEGER,
+    //         y INTEGER,
+    //         z INTEGER
+    //     );
+    //     CREATE OR REPLACE TABLE cand_cell_relation (
+    //         cell_id BIGINT,
+    //         geom_id BIGINT
+    //     );
+    //     ",
+    // )?;
+
+    // let mut cand_cell_app = con.appender_with_columns("cand_cells", &["id", "x", "y", "z"])?;
+    // let mut relation_app =
+    //     con.appender_with_columns("cand_cell_relation", &["cell_id", "geom_id"])?;
+
+    // cells
+    //     .iter()
+    //     .enumerate()
+    //     .for_each(|(cell_id, (cells, geom_ids))| {
+    //         cand_cell_app
+    //             .append_row(params![cell_id as i64 + 1, cells.0, cells.1, params.level])
+    //             .expect("Could not append cand cell");
+    //         geom_ids.iter().for_each(|id| {
+    //             relation_app
+    //                 .append_row([cell_id as i64, *id])
+    //                 .expect("Could not append relation ids")
+    //         });
+    //     });
+
+    // panic!("Done");
+
+    //     let sql = "WITH
+    //   scored AS MATERIALIZED (
+    //     SELECT
+    //       draught,
+    //       render_geom (
+    //         point,
+    //         next_point,
+    //         dimensions,
+    //         {'x': ?, 'y': ?, 'level': ?},
+    //         parameters
+    //       ) as score,
+    //       median_draught
+    //     FROM
+    //       lines_with_geom a
+    //     WHERE
+    //       draught IS NOT NULL AND ST_Transform(ST_TileEnvelope (?, ?, ?), 'EPSG:3857', 'EPSG:4326') && a.geom
+    //   )
+    // SELECT
+    //   a.draught::float as draught,
+    //   combine_cell (
+    //     a.draught::float,
+    //     a.score,
+    //     a.median_draught::float,
+    //     b.draught::float,
+    //     b.score,
+    //     b.median_draught::float
+    //   ) as reliability
+    // FROM
+    //   scored a
+    //   LEFT JOIN scored b ON a.draught >= b.draught
+    // WHERE reliability >= 0.53
+    // ORDER BY draught, reliability DESC
+    // LIMIT 1;";
+
+    //     let chunk_size = cmp::max(cells.len() / 16, 2048);
+    //     let result: Vec<_> = cells
+    //         .par_chunks(chunk_size)
+    //         .map(|x| (x, con.lock().unwrap().try_clone().unwrap()))
+    //         .map(|(cells, con)| {
+    //             let mut stmt = con.prepare(sql).expect("Could not prepare statement");
+    //             cells
+    //                 .iter()
+    //                 .map(|(x, y)| {
+    //                     stmt.query_one(
+    //                         params![
+    //                             *x as u32,
+    //                             *y as u32,
+    //                             params.level as u8,
+    //                             params.level,
+    //                             *x,
+    //                             *y
+    //                         ],
+    //                         |x| Ok((x.get::<_, f32>(0), x.get::<_, f32>(1))),
+    //                     )
+    //                 })
+    //                 .collect::<Vec<_>>()
+    //         })
+    //         .flatten()
+    //         .map(|x| x.ok())
+    //         .map(|x| x.map(|x| (x.0.unwrap_or_default(), x.1.unwrap_or_default())))
+    //         .map(|x| x.unwrap_or_default())
+    //         .collect();
+
     // Write cells to table
+    let con = con.lock().unwrap().try_clone().unwrap();
     con.execute_batch(
         "
-        CREATE OR REPLACE TABLE render.render (
-                x INTEGER,
-                y INTEGER,
-                z INTEGER,
-                draught FLOAT,
-                reliability FLOAT
-            );
-        ",
+            CREATE OR REPLACE TABLE render.render (
+                    x INTEGER,
+                    y INTEGER,
+                    z INTEGER,
+                    draught FLOAT,
+                    reliability FLOAT
+                );
+            ",
     )?;
 
     let mut app = con.appender_to_db("render", "render")?;

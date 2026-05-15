@@ -1,7 +1,11 @@
 use approx::AbsDiffEq;
 use cached::proc_macro::once;
-use std::ops::{Div, Sub};
+use std::{
+    f64::consts::PI,
+    ops::{Div, Sub},
+};
 
+use geo_types::polygon;
 use nalgebra::{ArrayStorage, Const, Matrix, matrix, vector};
 
 #[derive(Debug, Clone, Copy)]
@@ -13,6 +17,8 @@ where
     pub max: T,
 }
 const TOL: f32 = 1e-6;
+const RADIUS: f64 = 6378137.0;
+const CIRCUMFERENCE: f64 = 2. * PI * RADIUS;
 
 #[once]
 pub fn judweight_vessel() -> [f32; 6] {
@@ -92,6 +98,10 @@ pub fn gravity_model(
 ) -> f32 {
     let diff = draught_m - draught_o;
     let rel = rel_m * rel_o;
+    if rel > 1.1 {
+        dbg!(&rel_m);
+        dbg!(&rel_o);
+    }
     assert!(rel <= 1.1);
     let dr_m = draught_dev(draught_m, dev_m);
     let dr_o = draught_dev(draught_o, dev_o);
@@ -111,6 +121,32 @@ pub fn gravity_model(
 fn draught_dev(draught: f32, med: f32) -> f32 {
     (draught - med).abs() / med
 }
+
+// Taken from the DuckDB spatial extension implementation.
+pub fn st_tileenvelope(z: u32, x: i32, y: i32) -> geo::Polygon<f64> {
+    let zoom_extent = (1_u32 << z) as f64;
+
+    let single_tile_width = CIRCUMFERENCE / zoom_extent;
+    let single_tile_height = CIRCUMFERENCE / zoom_extent;
+    let tile_left = get_tile_left(x as u32, single_tile_width);
+    let tile_right = tile_left + single_tile_width;
+    let tile_top = get_tile_top(y as u32, single_tile_height);
+    let tile_bottom = tile_top - single_tile_height;
+
+    init_from_bbox(tile_left, tile_bottom, tile_right, tile_top)
+}
+
+fn get_tile_left(tile_x: u32, single_tile_width: f64) -> f64 {
+    -0.5 * CIRCUMFERENCE + (tile_x as f64 * single_tile_width)
+}
+
+fn get_tile_top(tile_y: u32, single_tile_height: f64) -> f64 {
+    0.5 * CIRCUMFERENCE - (tile_y as f64 * single_tile_height)
+}
+fn init_from_bbox(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> geo::Polygon<f64> {
+    polygon!((x: min_x, y:min_y), (x: min_x, y:max_y),(x: max_x, y:max_y),(x: max_x, y:min_y), (x: min_x, y: min_y))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +175,25 @@ mod tests {
 
         let result = result_source * vec[0] + result_age * vec[1];
         assert_eq!(result, 0.);
+    }
+
+    // It is a good idea to make tests
+    #[test]
+    fn tile_envelope_test() {
+        let world = st_tileenvelope(0, 0, 0);
+        let aalborg = st_tileenvelope(10, 540, 313);
+
+        let world_text = format!("{:?}", world);
+        let aalborg_text = format!("{:?}", aalborg);
+
+        assert_eq!(
+            world_text,
+            "POLYGON((-20037508.342789244 -20037508.342789244,-20037508.342789244 20037508.342789244,20037508.342789244 20037508.342789244,20037508.342789244 -20037508.342789244,-20037508.342789244 -20037508.342789244))"
+        );
+
+        assert_eq!(
+            aalborg_text,
+            "POLYGON((1095801.2374962866 7748880.179438028,1095801.2374962866 7788015.937920038,1134936.995978297 7788015.937920038,1134936.995978297 7748880.179438028,1095801.2374962866 7748880.179438028))"
+        );
     }
 }
