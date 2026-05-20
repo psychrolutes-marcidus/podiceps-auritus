@@ -283,9 +283,7 @@ fn search_tile(
                 _ => unimplemented!(),
             };
         }
-        None => {
-            println!("Found nothing in: {}, {}, {}", z, x, y);
-        }
+        None => {}
     }
 }
 
@@ -452,15 +450,7 @@ pub fn get_candidate_cells(
             .map(|(point, _)| point)
             .collect();
         println!("Level: {}, Cells: {}", i, cells.len());
-        if cells.len() == 0 {
-            let _unused = geoms.read().inspect(|x| {
-                dbg!(&x);
-            });
-        }
     }
-    let _unused = geoms.read().inspect(|x| {
-        dbg!(&x);
-    });
 
     //.map(|x| x.0.ok().zip(x.1.ok()).zip(x.2.okdraughtmapscorex| medle (draught, score, medt candidates: Vec<_> = cells
     //     .map(|(x, y)| {
