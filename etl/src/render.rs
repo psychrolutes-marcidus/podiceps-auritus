@@ -73,7 +73,7 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
   FROM vessel_attributes.draught_nulls_by_ship_type
 );",
     )?;
-    let query_start = "CREATE OR REPLACE VIEW render.trajs AS (
+    let query_start = "CREATE TEMP TABLE trajs AS (
       SELECT
         ap.mmsi,
         ap.timestamp,
@@ -97,7 +97,7 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     tx.execute_batch(&query)?;
 
     tx.execute_batch(
-        "CREATE OR REPLACE VIEW lines AS (
+        "CREATE TEMP TABLE lines AS (
   SELECT
     ap.mmsi,
     ap.timestamp,
@@ -152,7 +152,7 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     draught,
     ship_type
   FROM
-    render.trajs ap
+    trajs ap
 );
 ",
     )?;
