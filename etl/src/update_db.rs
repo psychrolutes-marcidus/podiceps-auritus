@@ -52,13 +52,16 @@ pub fn update_db(db_path: &Path, path: &Path) -> Result<(), DatabaseError> {
         .collect::<Result<Vec<_>, _>>()?;
 
     let paths: Vec<_> = paths.iter().map(|x| format!("'{}'", x)).collect();
-
+    paths.iter().for_each(|path|{
+        
     let sql = format!(
-        "CREATE OR REPLACE VIEW ais_data AS (SELECT * FROM read_parquet([{}]) WHERE lat != 91)",
-        paths.join(",")
+        "INSERT INTO ais_data SELECT DISTINCT ON (mmsi, timestamp) mmsi, timestamp, lat, lon, ship_length, ship_width, draught, to_bow, to_starboard, to_stern, to_port, ship_type FROM read_parquet({}) WHERE lat != 91 ORDER BY ALL;",
+        path
     );
 
-    tx.execute(sql.as_str(), [])?;
+    tx.execute(sql.as_str(), []).expect("Could not import data");
+    });
+
     update_tables(&tx)?;
     tx.commit()?;
     Ok(())

@@ -204,8 +204,6 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     LEFT JOIN draught_nulls_by_ship_type dnull ON ap.ship_type = dnull.ship_type
     LEFT JOIN vessel_stats.linear_regression lr ON ap.ship_type = lr.ship_type
     LEFT JOIN vessel_stats.std_draught sd ON ap.mmsi = sd.mmsi
-    WHERE 
-    (SELECT true FROM cand_cells b WHERE ST_Intersects(cellgeom, geom) LIMIT 1)
 );
 
 CREATE INDEX geom_idx ON lines_with_geom USING RTREE (geom)";
@@ -327,7 +325,6 @@ pub fn get_candidate_cells(
 
         cells = cells
             .par_iter()
-            .with_min_len(2048)
             .map(|x| {
                 rayon::iter::repeat_n((x, increase as u32), 4_usize.pow(increase as u32))
                     .enumerate()
@@ -342,12 +339,7 @@ pub fn get_candidate_cells(
             .filter(|point| {
                 let tile = st_tileenvelope(i as u32 + increase as u32, point.0, point.1);
                 let mut inter = index.locate_in_envelope_intersecting(&tile.envelope());
-                inter
-                    .find_map(|x| match geoms[x.data].intersects(&tile) {
-                        true => Some(x),
-                        false => None,
-                    })
-                    .is_some()
+                inter.any(|x| geoms[x.data].intersects(&tile))
             })
             .collect();
         println!("Level: {}, Cells: {}", i, cells.len());
