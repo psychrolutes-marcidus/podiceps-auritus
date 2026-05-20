@@ -427,7 +427,7 @@ fn render_cell_to_table(
                         .map(|left| {
                             stuff.iter().map(|right| {
                                 (
-                                    left.0,
+                                    left.1,
                                     gravity_model(
                                         left.0, left.1, left.2, right.0, right.1, right.2,
                                     ),
