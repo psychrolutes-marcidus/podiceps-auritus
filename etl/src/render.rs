@@ -1,16 +1,20 @@
 use std::cmp;
-use std::sync::{Arc, Mutex};
+use std::ops::Not;
+use std::sync::{Arc, Mutex, RwLock};
 
 use algorithms::cell::{gravity_model, st_tileenvelope};
-use duckdb::{Config, Connection, DuckdbConnectionManager};
+use duckdb::{Config, Connection, DuckdbConnectionManager, OptionalExt};
 use duckdb::{Statement, params};
 use geo::{Centroid, Geometry, Intersects, Point, algorithm};
 use geo_traits::GeometryTrait;
-use geo_traits::to_geo::{ToGeoGeometry, ToGeoLine, ToGeoPoint, ToGeoPolygon};
+use geo_traits::to_geo::{
+    ToGeoGeometry, ToGeoGeometryCollection, ToGeoLine, ToGeoLineString, ToGeoMultiLineString,
+    ToGeoMultiPoint, ToGeoMultiPolygon, ToGeoPoint, ToGeoPolygon, ToGeoRect, ToGeoTriangle,
+};
 use r2d2::ManageConnection;
 use rayon::prelude::*;
 use rstar::primitives::{GeomWithData, Rectangle};
-use rstar::{Envelope, RTreeObject};
+use rstar::{Envelope, RTree, RTreeObject};
 
 use crate::RenderCell;
 
@@ -78,12 +82,13 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
         ap.mmsi,
         ap.timestamp,
         {'lon': lon, 'lat': lat, 'time': epoch(ap.timestamp)} as point,
-        {
+        CASE WHEN to_bow IS NOT NULL AND to_starboard IS NOT NULL AND to_stern IS NOT NULL AND to_port IS NOT NULL THEN {
               'to_bow': ap.to_bow::float,
               'to_starboard': ap.to_starboard::float,
               'to_stern': ap.to_stern::float,
               'to_port': ap.to_port::float
-      } as dimensions,
+      } ELSE NULL
+      END as dimensions,
       draught,
       ship_type
       FROM
@@ -170,7 +175,6 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
 
     let rest = "
   SELECT
-    nextval('geom_id_seq') as id,
     ap.mmsi,
     ap.timestamp,
     ap.point,
@@ -184,10 +188,10 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     } as parameters,
     CASE
       WHEN ap.next_point IS NOT NULL
-      AND {'no': 1} IN (dimensions) IS NOT NULL
+      AND dimensions IS NOT NULL
       THEN st_geomfromwkb (polyganize (ap.point, ap.next_point, dimensions))
       WHEN ap.next_point IS NOT NULL
-      AND {'no': 1} IN (dimensions) IS NULL THEN ST_MakeLine (
+      AND dimensions IS NULL THEN ST_MakeLine (
         ST_Point (ap.point.lon, ap.point.lat),
         ST_Point (ap.next_point.lon, ap.next_point.lat)
       )
@@ -210,7 +214,6 @@ CREATE INDEX geom_idx ON lines_with_geom USING RTREE (geom)";
     let sql = format!("LOAD spatial;
 SET
   geometry_always_xy = TRUE;
-  CREATE TEMP SEQUENCE geom_id_seq INCREMENT BY 1 START WITH 1;
 CREATE OR REPLACE TABLE lines_with_geom AS (
   WITH cand_cells AS MATERIALIZED (
 SELECT
@@ -229,6 +232,63 @@ SELECT
 }
 
 type RectIdx = GeomWithData<Rectangle<Point>, usize>;
+fn search_tile(
+    index: Arc<RwLock<RTree<RectIdx>>>,
+    geom_list: Arc<RwLock<Vec<Geometry>>>,
+    manager: &Connection,
+    x: i32,
+    y: i32,
+    z: i32,
+) {
+    let mut index = index.write().expect("Could not get write lock");
+    let mut list = geom_list.write().expect("Could not get write lock");
+
+    let wkb_row = manager.query_row("SELECT ST_AsWKB(ST_Transform(geom, 'EPSG:4326', 'EPSG:3857', always_xy := true)) FROM lines_with_geom WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326', always_xy := true), geom) ORDER BY ST_Area(geom) DESC LIMIT 1", [z, x, y], |row| row.get::<_, Vec<u8>>(0)).optional().unwrap();
+    match wkb_row {
+        Some(w) => {
+            let geom = wkb::reader::read_wkb(&w).expect("Malformed wkb");
+            match geom.as_type() {
+                geo_traits::GeometryType::Point(p) => {
+                    let index_geom =
+                        RectIdx::new(Rectangle::from_aabb(p.to_point().envelope()), list.len());
+                    index.insert(index_geom);
+                    list.push(p.to_geometry());
+                }
+                geo_traits::GeometryType::LineString(ls) => {
+                    let index_geom = RectIdx::new(
+                        Rectangle::from_aabb(ls.to_line_string().envelope()),
+                        list.len(),
+                    );
+                    index.insert(index_geom);
+                    list.push(ls.to_geometry());
+                }
+                geo_traits::GeometryType::Polygon(p) => {
+                    let index_geom =
+                        RectIdx::new(Rectangle::from_aabb(p.to_polygon().envelope()), list.len());
+                    index.insert(index_geom);
+                    list.push(p.to_geometry());
+                }
+                geo_traits::GeometryType::Triangle(t) => {
+                    let index_geom =
+                        RectIdx::new(Rectangle::from_aabb(t.to_triangle().envelope()), list.len());
+                    index.insert(index_geom);
+                    list.push(t.to_geometry());
+                }
+                geo_traits::GeometryType::Line(l) => {
+                    let index_geom =
+                        RectIdx::new(Rectangle::from_aabb(l.to_line().envelope()), list.len());
+                    index.insert(index_geom);
+                    list.push(l.to_geometry());
+                }
+                _ => unimplemented!(),
+            };
+        }
+        None => {
+            println!("Found nothing in: {}, {}, {}", z, x, y);
+        }
+    }
+}
+
 fn get_index(
     con: &Connection,
 ) -> Result<
@@ -239,7 +299,7 @@ fn get_index(
     Box<dyn std::error::Error>,
 > {
     let mut stmt = con.prepare(
-        "SELECT ST_AsWKB(ST_Transform(geom, 'EPSG:4326', 'EPSG:3857')) FROM lines_with_geom;",
+        "SELECT ST_AsWKB(ST_Transform(geom, 'EPSG:4326', 'EPSG:3857')) FROM lines_with_geom ORDER BY ST_Area(geom) DESC LIMIT 10000",
     )?;
     let (aabbs, geoms): (Vec<_>, Vec<_>) = stmt
         .query_map([], |row| row.get::<_, Vec<u8>>(0))?
@@ -269,6 +329,27 @@ fn get_index(
                     ),
                     poly.to_geometry(),
                 ),
+                geo_traits::GeometryType::LineString(lines) => (
+                    RectIdx::new(
+                        rstar::primitives::Rectangle::from_aabb(lines.to_line_string().envelope()),
+                        i,
+                    ),
+                    lines.to_geometry(),
+                ),
+                geo_traits::GeometryType::MultiPolygon(mp) => (
+                    RectIdx::new(
+                        rstar::primitives::Rectangle::from_aabb(mp.to_multi_polygon().envelope()),
+                        i,
+                    ),
+                    mp.to_geometry(),
+                ),
+                geo_traits::GeometryType::Triangle(t) => (
+                    RectIdx::new(
+                        rstar::primitives::Rectangle::from_aabb(t.to_triangle().envelope()),
+                        i,
+                    ),
+                    t.to_geometry(),
+                ),
                 _ => unimplemented!(),
             }
         })
@@ -284,6 +365,8 @@ pub fn get_candidate_cells(
 ) -> Result<Vec<(i32, i32)>, Box<dyn std::error::Error>> {
     let (index, geoms) = get_index(&manager)?;
     assert_ne!(geoms.len(), 0);
+    let index = Arc::new(RwLock::new(index));
+    let geoms = Arc::new(RwLock::new(geoms));
     let a_manager = Arc::new(Mutex::new(manager));
     let parser = |x: &String| {
         x.split(",")
@@ -336,14 +419,48 @@ pub fn get_candidate_cells(
                     })
             })
             .flatten()
-            .filter(|point| {
+            .map(|point| {
+                let index_ref = index.read().expect("Could not read lock");
                 let tile = st_tileenvelope(i as u32 + increase as u32, point.0, point.1);
-                let mut inter = index.locate_in_envelope_intersecting(&tile.envelope());
-                inter.any(|x| geoms[x.data].intersects(&tile))
+                let mut inter = index_ref.locate_in_envelope_intersecting(&tile.envelope());
+                let any_geom = inter.any(|x| {
+                    geoms.read().expect("Could not get read lock")[x.data].intersects(&tile)
+                });
+                (point, any_geom)
             })
+            .filter(|(point, any_geom)| {
+                if !any_geom {
+                    let manager_lock = a_manager.lock().expect("Could not lock connection");
+                    let manager = manager_lock.try_clone().expect("Could not clone");
+                    manager.execute_batch(EXTENSION_QUERY).expect("Fuck CuckDB");
+                    let tile = st_tileenvelope(i as u32 + increase as u32, point.0, point.1);
+                    search_tile(
+                        index.clone(),
+                        geoms.clone(),
+                        &manager,
+                        point.0,
+                        point.1,
+                        i + increase as i32,
+                    );
+                    let read_index = index.read().expect("Could not read");
+                    let read_geoms = geoms.read().expect("Could not read");
+                    let mut inter = read_index.locate_in_envelope_intersecting(&tile.envelope());
+                    return inter.any(|x| read_geoms[x.data].intersects(&tile));
+                }
+                *any_geom
+            })
+            .map(|(point, _)| point)
             .collect();
         println!("Level: {}, Cells: {}", i, cells.len());
+        if cells.len() == 0 {
+            let _unused = geoms.read().inspect(|x| {
+                dbg!(&x);
+            });
+        }
     }
+    let _unused = geoms.read().inspect(|x| {
+        dbg!(&x);
+    });
 
     //.map(|x| x.0.ok().zip(x.1.ok()).zip(x.2.okdraughtmapscorex| medle (draught, score, medt candidates: Vec<_> = cells
     //     .map(|(x, y)| {
@@ -369,11 +486,11 @@ fn render_cell_to_table(
         con.try_clone().expect("Could not clone connection"),
     ));
 
-    let chunks_size = cells.len() / 16;
+    let chunks_size = std::cmp::max(cells.len() / 16, 2048);
 
     let query = "SELECT draught::float, render_geom(point, next_point, dimensions, {'x': ?, 'y': ?, 'level': ?}, parameters) as score, median_draught 
      FROM lines_with_geom b
-     WHERE ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326') && geom
+     WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326', always_xy := true), geom)
      ORDER BY draught, score DESC;";
 
     let result: Vec<_> = cells
