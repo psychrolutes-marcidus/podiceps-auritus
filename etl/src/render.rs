@@ -208,6 +208,7 @@ CREATE TEMP TABLE IF NOT EXISTS draught_nulls_by_ship_type AS (
     LEFT JOIN draught_nulls_by_ship_type dnull ON ap.ship_type = dnull.ship_type
     LEFT JOIN vessel_stats.linear_regression lr ON ap.ship_type = lr.ship_type
     LEFT JOIN vessel_stats.std_draught sd ON ap.mmsi = sd.mmsi
+    WHERE (SELECT true FROM cand_cells WHERE ST_Intersects(cellgeom, geom) LIMIT 1)
 );
 
 CREATE INDEX geom_idx ON lines_with_geom USING RTREE (geom)";
@@ -240,12 +241,11 @@ fn search_tile(
     y: i32,
     z: i32,
 ) {
-    let mut index = index.write().expect("Could not get write lock");
-    let mut list = geom_list.write().expect("Could not get write lock");
-
     let wkb_row = manager.query_row("SELECT ST_AsWKB(ST_Transform(geom, 'EPSG:4326', 'EPSG:3857', always_xy := true)) FROM lines_with_geom WHERE ST_Intersects(ST_Transform(ST_TileEnvelope(?, ?, ?), 'EPSG:3857', 'EPSG:4326', always_xy := true), geom) ORDER BY ST_Area(geom) DESC LIMIT 1", [z, x, y], |row| row.get::<_, Vec<u8>>(0)).optional().unwrap();
     match wkb_row {
         Some(w) => {
+            let mut index = index.write().expect("Could not get write lock");
+            let mut list = geom_list.write().expect("Could not get write lock");
             let geom = wkb::reader::read_wkb(&w).expect("Malformed wkb");
             match geom.as_type() {
                 geo_traits::GeometryType::Point(p) => {
@@ -430,6 +430,7 @@ pub fn get_candidate_cells(
                 if !any_geom {
                     let manager_lock = a_manager.lock().expect("Could not lock connection");
                     let manager = manager_lock.try_clone().expect("Could not clone");
+                    drop(manager_lock);
                     manager.execute_batch(EXTENSION_QUERY).expect("Fuck CuckDB");
                     let tile = st_tileenvelope(i as u32 + increase as u32, point.0, point.1);
                     search_tile(
